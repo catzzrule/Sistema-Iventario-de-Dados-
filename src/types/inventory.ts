@@ -9,6 +9,10 @@ export type TableRow = {
 export type FormData = {
   unit?: string
   system_name?: string
+  system_development?: string
+  system_architecture?: string
+  system_hosting?: string
+  system_start_date?: string
   created_at?: string
   updated_on?: string
   controller_name?: string

@@ -633,9 +633,12 @@ button, input, textarea, select {
 /* ==========================================================================
    FORM VIEW & ENHANCED STEPPER
    ========================================================================== */
+/* ==========================================================================
+   FORM VIEW & ENHANCED STEPPER (CLEAN INSTITUTIONAL)
+   ========================================================================== */
 .form-page-layout {
   min-height: 100vh;
-  background: radial-gradient(circle at 10% 20%, #f0fdf4 0%, #f8fafc 45%, #ecfdf5 85%, #e6f4f0 100%);
+  background-color: #f8fafc;
   position: relative;
   overflow-x: hidden;
   padding-bottom: 90px;
@@ -657,19 +660,19 @@ button, input, textarea, select {
 }
 
 .form-page-title {
-  font-size: 28px;
-  font-weight: 800;
-  letter-spacing: -0.6px;
-  color: var(--text-main);
+  font-size: 26px;
+  font-weight: 700;
+  letter-spacing: -0.5px;
+  color: #0f172a;
   margin-bottom: 4px;
 }
 
 .form-page-subtitle {
-  font-size: 13px;
-  color: var(--text-muted);
+  font-size: 13.5px;
+  color: #64748b;
 }
 
-/* Stepper Nav Enhanced Cards */
+/* Stepper Nav Enhanced Cards (Clean & Institutional) */
 .stepper-nav-enhanced {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
@@ -683,75 +686,71 @@ button, input, textarea, select {
   position: relative;
   display: flex;
   flex-direction: column;
-  padding: 16px 18px;
-  background: rgba(255, 255, 255, 0.85);
-  border: 1px solid var(--border-light);
-  border-radius: var(--radius-lg);
-  backdrop-filter: blur(12px);
+  padding: 14px 16px;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
   text-align: left;
   cursor: pointer;
-  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  transition: all 0.2s ease;
   overflow: hidden;
-  box-shadow: var(--shadow-sm);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
 }
 
 .stepper-tab-card:hover {
-  transform: translateY(-3px);
-  border-color: var(--primary);
-  box-shadow: 0 8px 20px rgba(5, 150, 105, 0.12);
-  background: #ffffff;
+  border-color: #cbd5e1;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
 }
 
 .stepper-tab-card:active {
-  transform: translateY(-1px) scale(0.98);
+  transform: translateY(0);
 }
 
 .stepper-tab-card.active {
-  background: #ffffff;
-  border-color: var(--primary);
-  box-shadow: 0 10px 25px -5px rgba(5, 150, 105, 0.2), 0 0 0 2px rgba(16, 185, 129, 0.2);
+  background: #f0fdf4;
+  border-color: #059669;
+  box-shadow: 0 2px 8px rgba(5, 150, 105, 0.08);
 }
 
 .tab-card-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 10px;
+  margin-bottom: 8px;
 }
 
 .tab-step-badge {
   width: 24px;
   height: 24px;
-  border-radius: var(--radius-full);
+  border-radius: 50%;
   background: #f1f5f9;
-  color: var(--text-muted);
+  color: #64748b;
   font-size: 11px;
-  font-weight: 800;
+  font-weight: 700;
   display: grid;
   place-items: center;
   transition: all 0.2s ease;
 }
 
 .stepper-tab-card.active .tab-step-badge {
-  background: linear-gradient(135deg, #059669 0%, #10b981 100%);
+  background: #059669;
   color: #ffffff;
-  box-shadow: 0 2px 8px rgba(16, 185, 129, 0.4);
 }
 
 .tab-card-icon {
-  color: var(--text-subtle);
+  color: #94a3b8;
   transition: color 0.2s;
 }
 
 .stepper-tab-card.active .tab-card-icon {
-  color: var(--primary);
+  color: #059669;
 }
 
 .tab-card-title {
   display: block;
   font-size: 13px;
   font-weight: 700;
-  color: var(--text-main);
+  color: #0f172a;
   line-height: 1.3;
   margin-bottom: 2px;
 }
@@ -759,7 +758,7 @@ button, input, textarea, select {
 .tab-card-desc {
   display: block;
   font-size: 11px;
-  color: var(--text-muted);
+  color: #64748b;
 }
 
 .tab-active-indicator {
@@ -768,10 +767,10 @@ button, input, textarea, select {
   left: 0;
   right: 0;
   height: 3px;
-  background: linear-gradient(90deg, #059669 0%, #10b981 100%);
+  background: #059669;
 }
 
-/* Glassmorphism Main Form Card */
+/* Institutional Main Form Card */
 .form-main-grid {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 300px;
@@ -779,18 +778,18 @@ button, input, textarea, select {
 }
 
 .glass-card {
-  background: rgba(255, 255, 255, 0.92) !important;
-  backdrop-filter: blur(16px);
-  border: 1px solid rgba(16, 185, 129, 0.18) !important;
-  box-shadow: 0 20px 40px -15px rgba(6, 78, 59, 0.07), 0 1px 3px rgba(0, 0, 0, 0.04) !important;
-  border-radius: var(--radius-lg);
+  background: #ffffff !important;
+  border: 1px solid #e2e8f0 !important;
+  border-top: 4px solid #059669 !important;
+  box-shadow: 0 4px 6px -1px rgba(15, 23, 42, 0.04), 0 2px 4px -2px rgba(15, 23, 42, 0.02) !important;
+  border-radius: 12px;
   padding: 32px;
 }
 
 .section-block {
-  margin-bottom: 36px;
-  padding-bottom: 28px;
-  border-bottom: 1px solid var(--border-light);
+  margin-bottom: 32px;
+  padding-bottom: 24px;
+  border-bottom: 1px solid #e2e8f0;
 }
 
 .section-block:last-child {
@@ -803,42 +802,44 @@ button, input, textarea, select {
   display: flex;
   align-items: center;
   gap: 12px;
-  color: var(--primary-dark);
-  margin-bottom: 18px;
+  color: #0f172a;
+  margin-bottom: 20px;
 }
 
 .title-icon-badge {
-  width: 36px;
-  height: 36px;
-  border-radius: var(--radius-md);
-  background: linear-gradient(135deg, #059669 0%, #10b981 100%);
-  color: #ffffff;
+  width: 34px;
+  height: 34px;
+  border-radius: 8px;
+  background: #ecfdf5;
+  color: #059669;
+  border: 1px solid #a7f3d0;
   display: grid;
   place-items: center;
-  box-shadow: 0 4px 10px rgba(5, 150, 105, 0.25);
   flex-shrink: 0;
 }
 
 .title-icon-badge.badge-warning {
-  background: linear-gradient(135deg, #dc2626 0%, #ef4444 100%);
-  box-shadow: 0 4px 10px rgba(239, 68, 68, 0.25);
+  background: #fef2f2;
+  color: #dc2626;
+  border: 1px solid #fecaca;
 }
 
 .section-title h2 {
-  font-size: 18px;
-  font-weight: 800;
-  letter-spacing: -0.3px;
+  font-size: 17px;
+  font-weight: 700;
+  letter-spacing: -0.2px;
+  color: #0f172a;
 }
 
 .form-grid-2 {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   gap: 16px;
 }
 
 .form-grid-3 {
   display: grid;
-  grid-template-columns: 1fr 1fr 1fr;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr);
   gap: 16px;
 }
 
@@ -855,26 +856,29 @@ button, input, textarea, select {
 .form-field label {
   font-size: 12px;
   font-weight: 700;
-  color: var(--text-main);
+  color: #334155;
 }
 
 .form-field input,
-.form-field textarea {
-  padding: 11px 14px;
-  border: 1px solid var(--border-medium);
-  border-radius: var(--radius-md);
+.form-field textarea,
+.form-field select {
+  width: 100%;
+  max-width: 100%;
+  padding: 10px 13px;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
   font-size: 13px;
-  color: var(--text-main);
+  color: #0f172a;
   background: #ffffff;
-  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
 
 .form-field input:focus,
-.form-field textarea:focus {
+.form-field textarea:focus,
+.form-field select:focus {
   outline: none;
-  border-color: var(--primary);
-  box-shadow: 0 0 0 4px rgba(16, 185, 129, 0.15), 0 2px 8px rgba(16, 185, 129, 0.1);
-  transform: translateY(-1px);
+  border-color: #059669;
+  box-shadow: 0 0 0 3px rgba(5, 150, 105, 0.12);
 }
 
 .help-text {

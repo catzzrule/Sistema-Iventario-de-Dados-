@@ -354,13 +354,13 @@ export const InventoryFormView: React.FC<InventoryFormViewProps> = ({
         <div className="form-main-grid">
           <section className="form-card-main glass-card relative overflow-hidden">
             <BorderBeam
-              size={570}
-              duration={12}
+              size={300}
+              duration={15}
               delay={0}
-              colorFrom="#4265ff"
-              colorTo="#6ae523"
-              borderWidth={3}
-              squircle={true}
+              colorFrom="#059669"
+              colorTo="#10b981"
+              borderWidth={1.5}
+              squircle={false}
             />
 
             {/* TAB 1: IDENTIFICAÇÃO E AGENTES (TODOS OBRIGATÓRIOS) */}
@@ -377,7 +377,10 @@ export const InventoryFormView: React.FC<InventoryFormViewProps> = ({
 
                   <div className="form-grid-2">
                     <div className={`form-field full-width ${isFieldInvalid('system_name') ? 'field-error' : ''}`}>
-                      <label htmlFor="system_name">1.1 — Sistema, Plataforma ou Banco de Dados Relacionado *</label>
+                      <label htmlFor="system_name" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        1.1 — Nome do sistema / Plataforma *
+                        <span title="Nome pelo qual o sistema é conhecido na unidade que o administra."><Info size={14} className="text-muted cursor-help" /></span>
+                      </label>
                       <input
                         id="system_name"
                         type="text"
@@ -389,6 +392,72 @@ export const InventoryFormView: React.FC<InventoryFormViewProps> = ({
                       {isFieldInvalid('system_name') && (
                         <span className="error-hint">Campo obrigatório</span>
                       )}
+                    </div>
+
+                    <div className={`form-field ${isFieldInvalid('system_development') ? 'field-error' : ''}`}>
+                      <label htmlFor="system_development" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        1.1a — Sistema (Desenvolvimento)
+                        <span title="Classificação do sistema quanto ao desenvolvimento."><Info size={14} className="text-muted cursor-help" /></span>
+                      </label>
+                      <select
+                        id="system_development"
+                        value={getInputValue(item.form_data, 'system_development')}
+                        onChange={e => updateField('system_development', e.target.value)}
+                      >
+                        <option value="">Selecione...</option>
+                        <option value="Desenvolvido pela CGTI">1. Desenvolvido pela CGTI</option>
+                        <option value="Desenvolvido pela própria área">2. Desenvolvido pela própria área</option>
+                        <option value="Desenvolvido por ator externo ao MEsp">3. Desenvolvido por ator externo ao MEsp</option>
+                        <option value="Ready to Use Software (RUSP)">4. Ready to Use Software (RUSP)</option>
+                      </select>
+                    </div>
+
+                    <div className={`form-field ${isFieldInvalid('system_architecture') ? 'field-error' : ''}`}>
+                      <label htmlFor="system_architecture" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        1.1b — Sistema (Arquitetura)
+                        <span title="Classificação do sistema quanto à arquitetura do software."><Info size={14} className="text-muted cursor-help" /></span>
+                      </label>
+                      <select
+                        id="system_architecture"
+                        value={getInputValue(item.form_data, 'system_architecture')}
+                        onChange={e => updateField('system_architecture', e.target.value)}
+                      >
+                        <option value="">Selecione...</option>
+                        <option value="Desktop (executa integralmente na própria máquina do usuário)">1. Desktop (executa integralmente na própria máquina do usuário)</option>
+                        <option value="Cliente/servidor (Web)">2. Cliente/servidor (Web)</option>
+                        <option value="Cliente/servidor (não Web)">3. Cliente/servidor (não Web)</option>
+                      </select>
+                    </div>
+
+                    <div className={`form-field ${isFieldInvalid('system_hosting') ? 'field-error' : ''}`}>
+                      <label htmlFor="system_hosting" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        1.1c — Sistema (Hospedagem)
+                        <span title="Classificação do sistema quanto ao local em que o sistema está hospedado."><Info size={14} className="text-muted cursor-help" /></span>
+                      </label>
+                      <select
+                        id="system_hosting"
+                        value={getInputValue(item.form_data, 'system_hosting')}
+                        onChange={e => updateField('system_hosting', e.target.value)}
+                      >
+                        <option value="">Selecione...</option>
+                        <option value="Hospedado na Dataprev">1. Hospedado na Dataprev</option>
+                        <option value="Hospedado no Serpro">2. Hospedado no Serpro</option>
+                        <option value="Hospedado em outro local (externo ao MEsp)">3. Hospedado em outro local (externo ao MEsp)</option>
+                        <option value="Hospedado em outro local (interno ao MEsp)">4. Hospedado em outro local (interno ao MEsp)</option>
+                      </select>
+                    </div>
+
+                    <div className={`form-field ${isFieldInvalid('system_start_date') ? 'field-error' : ''}`}>
+                      <label htmlFor="system_start_date" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        1.1d — Data de início do funcionamento
+                        <span title="Data da entrada em operação do sistema."><Info size={14} className="text-muted cursor-help" /></span>
+                      </label>
+                      <input
+                        id="system_start_date"
+                        type="date"
+                        value={getInputValue(item.form_data, 'system_start_date')}
+                        onChange={e => updateField('system_start_date', e.target.value)}
+                      />
                     </div>
 
                     <div className={`form-field full-width ${isFieldInvalid('title') ? 'field-error' : ''}`}>

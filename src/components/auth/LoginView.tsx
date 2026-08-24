@@ -1,6 +1,7 @@
 import React, { useState } from 'react'
 import { ShieldCheck, Lock, Mail, ArrowRight, UserPlus, Info, CheckCircle2, LogIn } from 'lucide-react'
 import { AetherFlow } from './AetherFlow'
+import { supabase } from '../../supabase'
 
 interface LoginViewProps {
   configured: boolean

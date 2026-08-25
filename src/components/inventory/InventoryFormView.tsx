@@ -351,7 +351,7 @@ export const InventoryFormView: React.FC<InventoryFormViewProps> = ({
         </nav>
 
         {/* Grid Layout (Form Content + Sidebar Drawer) */}
-        <div className="form-main-grid">
+        <div className={`form-main-grid ${!isManager ? 'no-sidebar' : ''}`}>
           <section className="form-card-main glass-card relative overflow-hidden">
             <BorderBeam
               size={300}

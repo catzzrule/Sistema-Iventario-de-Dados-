@@ -171,8 +171,8 @@ button, input, textarea, select {
 
 .login-panel {
   display: grid;
-  grid-template-columns: 1fr 380px;
-  max-width: 900px;
+  grid-template-columns: 1fr 440px;
+  max-width: 980px;
   width: 100%;
   background: rgba(4, 30, 24, 0.7);
   border: 1px solid rgba(255, 255, 255, 0.15);
@@ -193,7 +193,7 @@ button, input, textarea, select {
 }
 
 .login-panel-right {
-  padding: 36px 32px;
+  padding: 44px 40px;
   background: #ffffff;
   color: var(--text-main);
   display: flex;

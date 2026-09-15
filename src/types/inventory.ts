@@ -83,3 +83,12 @@ export type UserProfile = {
   must_change_password?: boolean
   unit?: string
 }
+
+export type ManagedProfile = {
+  id: string
+  email: string | null
+  full_name: string | null
+  unit: string | null
+  role: Role
+  created_at: string
+}

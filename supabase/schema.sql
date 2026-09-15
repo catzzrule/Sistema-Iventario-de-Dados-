@@ -6,6 +6,7 @@ create table public.profiles (
   role public.app_role not null default 'user',
   full_name text,
   unit text,
+  email text,
   must_change_password boolean not null default true,
   created_at timestamptz not null default now()
 );
@@ -31,11 +32,12 @@ as $$ select exists (select 1 from public.profiles where id = auth.uid() and rol
 create or replace function public.handle_new_user()
 returns trigger language plpgsql security definer set search_path = public
 as $$ begin
-  insert into public.profiles(id, full_name, unit, role, must_change_password)
+  insert into public.profiles(id, full_name, unit, email, role, must_change_password)
   values (
     new.id,
     new.raw_user_meta_data ->> 'full_name',
     new.raw_user_meta_data ->> 'unit',
+    new.email,
     coalesce((new.raw_user_meta_data ->> 'role')::public.app_role, 'user'),
     coalesce((new.raw_user_meta_data ->> 'must_change_password')::boolean, true)
   );
@@ -113,4 +115,30 @@ create policy "notifications update read" on public.notifications for update usi
   (recipient_scope = 'user' and recipient_id = auth.uid())
   or (recipient_scope = 'managers' and public.is_admin())
 ) with check (true);
+
+-- ==========================================================================
+-- CONFIGURAÇÕES: e-mail no perfil (para listar usuários na tela de Gestão)
+-- ==========================================================================
+alter table public.profiles add column if not exists email text;
+
+-- Preenche o e-mail dos perfis já existentes com base no cadastro de autenticação.
+update public.profiles p
+set email = u.email
+from auth.users u
+where p.id = u.id and p.email is null;
+
+create or replace function public.handle_new_user()
+returns trigger language plpgsql security definer set search_path = public
+as $$ begin
+  insert into public.profiles(id, full_name, unit, email, role, must_change_password)
+  values (
+    new.id,
+    new.raw_user_meta_data ->> 'full_name',
+    new.raw_user_meta_data ->> 'unit',
+    new.email,
+    coalesce((new.raw_user_meta_data ->> 'role')::public.app_role, 'user'),
+    coalesce((new.raw_user_meta_data ->> 'must_change_password')::boolean, true)
+  );
+  return new;
+end; $$;
 

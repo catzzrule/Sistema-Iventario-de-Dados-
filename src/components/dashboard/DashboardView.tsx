@@ -1,11 +1,11 @@
 import React, { useState, useMemo } from 'react'
-import { AppNotification, Inventory, UserProfile, Role } from '../../types/inventory'
+import { AppNotification, Inventory, ManagedProfile, UserProfile, Role } from '../../types/inventory'
 import { getInputValue, getHighestRisk } from '../../utils/lgpdRisk'
 import { StatCard } from './StatCard'
-import { Sidebar } from './Sidebar'
+import { Sidebar, DashboardSection } from './Sidebar'
 import { NotificationBell } from './NotificationBell'
+import { SettingsPanel } from './SettingsPanel'
 import { RiskBadge } from '../common/RiskBadge'
-import { UserManagementModal } from '../auth/UserManagementModal'
 import {
   ShieldCheck,
   ClipboardList,
@@ -26,7 +26,6 @@ import {
   Trash2,
   Building2,
   FileSpreadsheet,
-  UserPlus,
   CheckCircle2,
   Undo2,
   X
@@ -36,8 +35,11 @@ interface DashboardViewProps {
   user: UserProfile
   inventories: Inventory[]
   notifications?: AppNotification[]
+  allUsers?: ManagedProfile[]
   onMarkNotificationRead?: (id: string) => void
   onReturnInventory?: (inventory: Inventory, message: string) => Promise<void>
+  onUpdateProfile?: (updates: { full_name: string; unit: string }) => Promise<void>
+  onUpdatePassword?: (newPassword: string) => Promise<void>
   onNew: () => void
   onEdit: (inventory: Inventory) => void
   onDelete?: (id: string) => Promise<void>
@@ -56,8 +58,11 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   user,
   inventories,
   notifications = [],
+  allUsers = [],
   onMarkNotificationRead,
   onReturnInventory,
+  onUpdateProfile,
+  onUpdatePassword,
   onNew,
   onEdit,
   onDelete,
@@ -65,6 +70,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   onExport,
   onCreateUser
 }) => {
+  const [activeView, setActiveView] = useState<DashboardSection>('overview')
   const [searchTerm, setSearchTerm] = useState('')
   const [statusFilter, setStatusFilter] = useState<'todos' | 'concluido' | 'rascunho'>('todos')
   const [riskFilter, setRiskFilter] = useState<'todos' | 'alto' | 'medio' | 'baixo'>('todos')
@@ -74,7 +80,6 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   const [returnMessage, setReturnMessage] = useState('')
   const [returning, setReturning] = useState(false)
   const [exportUnitSelected, setExportUnitSelected] = useState<string>('todas')
-  const [userModalOpen, setUserModalOpen] = useState(false)
   const [showWelcome, setShowWelcome] = useState(true)
 
   // Distinct units list for filtering and extraction
@@ -196,18 +201,6 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         </div>
 
         <div className="header-actions">
-          {isManager && onCreateUser && (
-            <button
-              type="button"
-              onClick={() => setUserModalOpen(true)}
-              className="btn-secondary btn-sm"
-              title="Cadastrar novos usuários e enviar senha provisória (TI)"
-            >
-              <UserPlus size={16} />
-              <span>Usuários (TI)</span>
-            </button>
-          )}
-
           <NotificationBell
             notifications={notifications}
             onMarkRead={onMarkNotificationRead || (() => {})}
@@ -233,10 +226,21 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       </header>
 
       <div className="app-body">
-        <Sidebar isManager={isManager} />
+        <Sidebar isManager={isManager} activeView={activeView} onNavigate={setActiveView} />
 
         {/* Main Content Container */}
         <main className="dashboard-content">
+        {activeView === 'settings' ? (
+          <SettingsPanel
+            user={user}
+            isManager={isManager}
+            allUsers={allUsers}
+            onUpdateProfile={onUpdateProfile || (async () => {})}
+            onUpdatePassword={onUpdatePassword || (async () => {})}
+            onCreateUser={onCreateUser}
+          />
+        ) : (
+        <>
           {showWelcome && (
             <div className="welcome-banner">
               <div className="welcome-banner-icon">
@@ -332,15 +336,6 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               </p>
             </div>
           </div>
-        )}
-
-        {/* Modal de Gestão de Usuários (TI) */}
-        {onCreateUser && (
-          <UserManagementModal
-            isOpen={userModalOpen}
-            onClose={() => setUserModalOpen(false)}
-            onCreateUser={onCreateUser}
-          />
         )}
 
         {/* Modal de Extração por Unidade (Administrador) */}
@@ -710,6 +705,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             </table>
           </div>
         </section>
+        </>
+        )}
         </main>
       </div>
     </div>

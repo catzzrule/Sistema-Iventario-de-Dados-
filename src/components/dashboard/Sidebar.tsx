@@ -15,24 +15,27 @@ const managerOnlyItems = [
   { icon: <Building2 size={18} />, label: 'Unidades e sistemas' }
 ]
 
-const generalItems = [
-  { icon: <BookOpen size={18} />, label: 'Guia LGPD' },
-  { icon: <Settings size={18} />, label: 'Configurações' }
-]
+export type DashboardSection = 'overview' | 'settings'
 
 interface SidebarProps {
   isManager: boolean
+  activeView: DashboardSection
+  onNavigate: (view: DashboardSection) => void
 }
 
-export const Sidebar: React.FC<SidebarProps> = ({ isManager }) => {
+export const Sidebar: React.FC<SidebarProps> = ({ isManager, activeView, onNavigate }) => {
   return (
     <aside className="app-sidebar">
       <nav className="sidebar-nav">
         <span className="sidebar-section-label">Menu Principal</span>
-        <button type="button" className="sidebar-nav-item active">
+        <button
+          type="button"
+          className={`sidebar-nav-item ${activeView === 'overview' ? 'active' : ''}`}
+          onClick={() => onNavigate('overview')}
+        >
           <LayoutGrid size={18} />
           <span>Visão geral</span>
-          <span className="sidebar-active-dot" aria-hidden="true" />
+          {activeView === 'overview' && <span className="sidebar-active-dot" aria-hidden="true" />}
         </button>
         {isManager && managerOnlyItems.map(item => (
           <button
@@ -48,18 +51,24 @@ export const Sidebar: React.FC<SidebarProps> = ({ isManager }) => {
         ))}
 
         <span className="sidebar-section-label">Administração</span>
-        {generalItems.map(item => (
-          <button
-            type="button"
-            key={item.label}
-            className="sidebar-nav-item disabled"
-            title="Em breve"
-            disabled
-          >
-            {item.icon}
-            <span>{item.label}</span>
-          </button>
-        ))}
+        <button
+          type="button"
+          className="sidebar-nav-item disabled"
+          title="Em breve"
+          disabled
+        >
+          <BookOpen size={18} />
+          <span>Guia LGPD</span>
+        </button>
+        <button
+          type="button"
+          className={`sidebar-nav-item ${activeView === 'settings' ? 'active' : ''}`}
+          onClick={() => onNavigate('settings')}
+        >
+          <Settings size={18} />
+          <span>Configurações</span>
+          {activeView === 'settings' && <span className="sidebar-active-dot" aria-hidden="true" />}
+        </button>
       </nav>
 
       <div className="sidebar-tip-card">

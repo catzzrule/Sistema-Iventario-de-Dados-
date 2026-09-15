@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react'
 import { createRoot } from 'react-dom/client'
 import { configured, supabase } from './supabase'
-import { Inventory, UserProfile, Role, AppNotification } from './types/inventory'
+import { Inventory, UserProfile, Role, AppNotification, ManagedProfile } from './types/inventory'
 import { initialForm } from './utils/lgpdRisk'
 import { exportInventoriesToCsv } from './utils/exportCsv'
 import { LoginView } from './components/auth/LoginView'
@@ -35,6 +35,7 @@ function App() {
   const [user, setUser] = useState<UserProfile | null>(null)
   const [inventories, setInventories] = useState<Inventory[]>([])
   const [notifications, setNotifications] = useState<AppNotification[]>([])
+  const [allUsers, setAllUsers] = useState<ManagedProfile[]>([])
   const [editing, setEditing] = useState<Inventory | null>(null)
   const [loading, setLoading] = useState(true)
   const [passwordRecovery, setPasswordRecovery] = useState(false)
@@ -116,6 +117,7 @@ function App() {
             role: autoRole,
             full_name: fullName,
             unit,
+            email: cleanEmail,
             must_change_password: autoRole === 'user'
           })
         }
@@ -140,6 +142,23 @@ function App() {
     setUser(profile)
     await loadInventories()
     await loadNotifications(profile)
+    if (isManagerProfile(profile)) {
+      await loadAllUsers()
+    }
+  }
+
+  async function loadAllUsers() {
+    if (!supabase) return
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('id, email, full_name, unit, role, created_at')
+      .order('created_at', { ascending: false })
+
+    if (error) {
+      console.warn('Notice loading users:', error)
+      return
+    }
+    setAllUsers((data || []) as ManagedProfile[])
   }
 
   async function loadInventories() {
@@ -350,15 +369,35 @@ function App() {
             role: params.role,
             full_name: params.fullName,
             unit: params.unit,
+            email: params.email.toLowerCase().trim(),
             must_change_password: mustChange
           })
         } catch (err) {
           console.warn('Profile upsert notice:', err)
         }
       }
+      await loadAllUsers()
     }
 
     return { tempPassword }
+  }
+
+  async function handleUpdateProfile(updates: { full_name: string; unit: string }) {
+    if (!user) return
+    if (supabase) {
+      const { error } = await supabase
+        .from('profiles')
+        .update({ full_name: updates.full_name, unit: updates.unit })
+        .eq('id', user.id)
+      if (error) throw error
+    }
+    setUser(prev => (prev ? { ...prev, full_name: updates.full_name, unit: updates.unit } : null))
+  }
+
+  async function handleUpdateOwnPassword(newPassword: string) {
+    if (!supabase) return
+    const { error } = await supabase.auth.updateUser({ password: newPassword })
+    if (error) throw error
   }
 
   async function deleteInventory(id: string) {
@@ -483,8 +522,11 @@ function App() {
       user={user}
       inventories={inventories}
       notifications={notifications}
+      allUsers={allUsers}
       onMarkNotificationRead={handleMarkNotificationRead}
       onReturnInventory={handleReturnInventory}
+      onUpdateProfile={handleUpdateProfile}
+      onUpdatePassword={handleUpdateOwnPassword}
       onNew={() =>
         setEditing({
           id: 'draft-' + crypto.randomUUID(),

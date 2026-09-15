@@ -7,12 +7,14 @@ interface ForcePasswordChangeViewProps {
   user: UserProfile
   onPasswordChanged: (newPassword: string) => Promise<void>
   onLogout: () => void
+  mode?: 'first-access' | 'recovery'
 }
 
 export const ForcePasswordChangeView: React.FC<ForcePasswordChangeViewProps> = ({
   user,
   onPasswordChanged,
-  onLogout
+  onLogout,
+  mode = 'first-access'
 }) => {
   const [newPassword, setNewPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
@@ -61,9 +63,13 @@ export const ForcePasswordChangeView: React.FC<ForcePasswordChangeViewProps> = (
               <ShieldCheck size={13} className="sparkle-icon" />
               <span>SEGURANÇA & CONFORMIDADE LGPD</span>
             </div>
-            <h2>Primeiro Acesso — Criar Senha Definitiva</h2>
+            <h2>{mode === 'recovery' ? 'Redefinir Senha' : 'Primeiro Acesso — Criar Senha Definitiva'}</h2>
             <p className="force-subtitle">
-              Sua conta <strong>{user.email}</strong> foi cadastrada pela equipe de TI com uma senha provisória. Por exigência de segurança e privacidade da LGPD, você deve cadastrar sua nova senha pessoal de no mínimo 6 caracteres antes de prosseguir para o sistema.
+              {mode === 'recovery' ? (
+                <>Defina uma nova senha para a conta <strong>{user.email}</strong>. Ela deve ter no mínimo 6 caracteres.</>
+              ) : (
+                <>Sua conta <strong>{user.email}</strong> foi cadastrada pela equipe de TI com uma senha provisória. Por exigência de segurança e privacidade da LGPD, você deve cadastrar sua nova senha pessoal de no mínimo 6 caracteres antes de prosseguir para o sistema.</>
+              )}
             </p>
           </div>
 

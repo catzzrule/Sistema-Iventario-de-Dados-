@@ -1,7 +1,9 @@
 import React, { useState, useMemo } from 'react'
-import { Inventory, UserProfile, Role } from '../../types/inventory'
+import { AppNotification, Inventory, UserProfile, Role } from '../../types/inventory'
 import { getInputValue, getHighestRisk } from '../../utils/lgpdRisk'
 import { StatCard } from './StatCard'
+import { Sidebar } from './Sidebar'
+import { NotificationBell } from './NotificationBell'
 import { RiskBadge } from '../common/RiskBadge'
 import { UserManagementModal } from '../auth/UserManagementModal'
 import {
@@ -15,7 +17,7 @@ import {
   LogOut,
   Search,
   SlidersHorizontal,
-  User,
+  ChevronDown,
   ShieldAlert,
   Inbox,
   Sparkles,
@@ -24,12 +26,18 @@ import {
   Trash2,
   Building2,
   FileSpreadsheet,
-  UserPlus
+  UserPlus,
+  CheckCircle2,
+  Undo2,
+  X
 } from 'lucide-react'
 
 interface DashboardViewProps {
   user: UserProfile
   inventories: Inventory[]
+  notifications?: AppNotification[]
+  onMarkNotificationRead?: (id: string) => void
+  onReturnInventory?: (inventory: Inventory, message: string) => Promise<void>
   onNew: () => void
   onEdit: (inventory: Inventory) => void
   onDelete?: (id: string) => Promise<void>
@@ -47,6 +55,9 @@ interface DashboardViewProps {
 export const DashboardView: React.FC<DashboardViewProps> = ({
   user,
   inventories,
+  notifications = [],
+  onMarkNotificationRead,
+  onReturnInventory,
   onNew,
   onEdit,
   onDelete,
@@ -59,8 +70,12 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   const [riskFilter, setRiskFilter] = useState<'todos' | 'alto' | 'medio' | 'baixo'>('todos')
   const [unitFilter, setUnitFilter] = useState<string>('todas')
   const [exportModalOpen, setExportModalOpen] = useState(false)
+  const [returnTarget, setReturnTarget] = useState<Inventory | null>(null)
+  const [returnMessage, setReturnMessage] = useState('')
+  const [returning, setReturning] = useState(false)
   const [exportUnitSelected, setExportUnitSelected] = useState<string>('todas')
   const [userModalOpen, setUserModalOpen] = useState(false)
+  const [showWelcome, setShowWelcome] = useState(true)
 
   // Distinct units list for filtering and extraction
   const distinctUnits = useMemo(() => {
@@ -139,18 +154,36 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     setExportModalOpen(false)
   }
 
+  const handleReturnConfirm = async () => {
+    if (!returnTarget || !onReturnInventory || !returnMessage.trim()) return
+    setReturning(true)
+    try {
+      await onReturnInventory(returnTarget, returnMessage.trim())
+      setReturnTarget(null)
+      setReturnMessage('')
+    } finally {
+      setReturning(false)
+    }
+  }
+
   const isManager =
     user?.role === 'admin' ||
     user?.role === 'master' ||
     user?.email?.toLowerCase() === 'catzzrule65@gmail.com'
 
-  return (
-    <div className="dashboard-layout">
-      {/* Ambient background glows */}
-      <div className="ambient-glow glow-1" aria-hidden="true" />
-      <div className="ambient-glow glow-2" aria-hidden="true" />
+  const displayName = user.full_name || user.email
+  const roleLabel =
+    user.role === 'admin' ? 'Administrador de Dados' : user.role === 'master' ? 'Master (TI)' : 'Operador de Dados'
+  const initials = displayName
+    .split(/[\s@.]+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map(part => part[0]?.toUpperCase())
+    .join('') || 'U'
 
-      {/* Navigation Header */}
+  return (
+    <div className="app-shell">
+      {/* Full-width Navigation Header */}
       <header className="app-header">
         <div className="header-brand">
           <div className="brand-logo shadow-emerald">
@@ -158,7 +191,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           </div>
           <div>
             <span className="brand-title">Inventário LGPD</span>
-            <span className="brand-subtitle">Plataforma de Governança Governamental</span>
+            <span className="brand-subtitle">Plataforma de Governança de Dados</span>
           </div>
         </div>
 
@@ -175,16 +208,18 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             </button>
           )}
 
+          <NotificationBell
+            notifications={notifications}
+            onMarkRead={onMarkNotificationRead || (() => {})}
+          />
+
           <div className="user-pill">
-            <div className="user-avatar">
-              <User size={16} />
-            </div>
+            <div className="user-avatar">{initials}</div>
             <div className="user-info">
-              <span className="user-email">{user.email}</span>
-              <span className={`user-role role-${user.role}`}>
-                {user.role === 'admin' ? 'Administrador (DPO / Gestor)' : user.role === 'master' ? 'Master (TI)' : 'Operador de Dados'}
-              </span>
+              <span className="user-email">{displayName}</span>
+              <span className={`user-role role-${user.role}`}>{roleLabel}</span>
             </div>
+            <ChevronDown size={14} className="user-pill-chevron" />
           </div>
 
           <button onClick={onLogout} className="btn-icon" title="Sair do sistema" aria-label="Sair do sistema">
@@ -193,9 +228,31 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         </div>
       </header>
 
-      {/* Main Content Container */}
-      <main className="dashboard-content">
-        {/* Hero Welcome Banner */}
+      <div className="app-body">
+        <Sidebar isManager={isManager} />
+
+        {/* Main Content Container */}
+        <main className="dashboard-content">
+          {showWelcome && (
+            <div className="welcome-banner">
+              <div className="welcome-banner-icon">
+                <CheckCircle2 size={18} />
+              </div>
+              <p>
+                <strong>Bem-vindo ao seu painel de governança.</strong> Acompanhe o inventário e mantenha o mapeamento dos dados pessoais sempre atualizado.
+              </p>
+              <button
+                type="button"
+                className="welcome-banner-close"
+                onClick={() => setShowWelcome(false)}
+                aria-label="Fechar aviso"
+              >
+                <X size={16} />
+              </button>
+            </div>
+          )}
+
+          {/* Hero Welcome Banner */}
         <section className="dashboard-hero-banner">
           <div className="hero-banner-content">
             <div className="hero-badge-chip">
@@ -341,6 +398,61 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                 >
                   <Download size={16} />
                   <span>Baixar Planilha</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Modal de Devolução de Processo (Gestor) */}
+        {returnTarget && (
+          <div className="modal-backdrop-overlay" onClick={() => (!returning ? setReturnTarget(null) : null)}>
+            <div className="modal-card-custom glass-card" onClick={e => e.stopPropagation()}>
+              <div className="modal-header">
+                <div className="modal-icon-badge modal-icon-badge-warning">
+                  <Undo2 size={24} />
+                </div>
+                <div>
+                  <h3>Devolver Processo</h3>
+                  <p>
+                    Explique ao operador o que precisa ser corrigido em <strong>{returnTarget.title || 'Inventário de Processo'}</strong>. O processo voltará para rascunho.
+                  </p>
+                </div>
+              </div>
+
+              <div className="modal-body margin-top">
+                <div className="form-field">
+                  <label htmlFor="return-message">Mensagem para o operador:</label>
+                  <textarea
+                    id="return-message"
+                    rows={4}
+                    value={returnMessage}
+                    onChange={e => setReturnMessage(e.target.value)}
+                    placeholder="Ex: Faltou preencher o prazo de retenção e a base legal do tratamento."
+                    className="custom-select-large"
+                    style={{ resize: 'vertical', fontFamily: 'inherit' }}
+                    autoFocus
+                  />
+                </div>
+              </div>
+
+              <div className="modal-footer margin-top">
+                <button
+                  type="button"
+                  onClick={() => setReturnTarget(null)}
+                  className="btn-secondary btn-sm"
+                  disabled={returning}
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  onClick={handleReturnConfirm}
+                  className="btn-primary btn-sm shadow-emerald"
+                  disabled={returning || !returnMessage.trim()}
+                >
+                  <Undo2 size={16} />
+                  <span>{returning ? 'Devolvendo...' : 'Devolver Processo'}</span>
                 </button>
               </div>
             </div>
@@ -545,6 +657,18 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                               <ArrowUpRight size={15} />
                             </button>
 
+                            {isManager && onReturnInventory && item.status === 'concluido' && (
+                              <button
+                                type="button"
+                                onClick={() => setReturnTarget(item)}
+                                className="btn-action-return"
+                                title="Devolver processo ao operador com uma mensagem"
+                              >
+                                <Undo2 size={14} />
+                                <span>Devolver</span>
+                              </button>
+                            )}
+
                             {onDelete && (
                               <button
                                 type="button"
@@ -582,7 +706,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             </table>
           </div>
         </section>
-      </main>
+        </main>
+      </div>
     </div>
   )
 }

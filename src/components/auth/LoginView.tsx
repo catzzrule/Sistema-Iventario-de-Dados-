@@ -162,7 +162,8 @@ export const LoginView: React.FC<LoginViewProps> = ({ configured, onLogin, onSig
                       setSending(true)
                       try {
                         if (supabase) {
-                          const { error: resetErr } = await supabase.auth.resetPasswordForEmail(email.trim())
+                          const redirectTo = window.location.origin + import.meta.env.BASE_URL
+                          const { error: resetErr } = await supabase.auth.resetPasswordForEmail(email.trim(), { redirectTo })
                           if (resetErr) throw resetErr
                           setMessage('Link de redefinição enviado para ' + email.trim() + '! Verifique sua caixa de entrada / spam.')
                         } else {

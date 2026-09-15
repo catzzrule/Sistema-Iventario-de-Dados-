@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react'
 import { createRoot } from 'react-dom/client'
 import { configured, supabase } from './supabase'
-import { Inventory, UserProfile, Role } from './types/inventory'
+import { Inventory, UserProfile, Role, AppNotification } from './types/inventory'
 import { initialForm } from './utils/lgpdRisk'
 import { exportInventoriesToCsv } from './utils/exportCsv'
 import { LoginView } from './components/auth/LoginView'
@@ -23,14 +23,34 @@ function getRoleForEmail(email: string): Role {
   return 'user'
 }
 
+function isManagerProfile(profile: UserProfile | null): boolean {
+  return (
+    profile?.role === 'admin' ||
+    profile?.role === 'master' ||
+    profile?.email?.toLowerCase() === 'catzzrule65@gmail.com'
+  )
+}
+
 function App() {
   const [user, setUser] = useState<UserProfile | null>(null)
   const [inventories, setInventories] = useState<Inventory[]>([])
+  const [notifications, setNotifications] = useState<AppNotification[]>([])
   const [editing, setEditing] = useState<Inventory | null>(null)
   const [loading, setLoading] = useState(true)
+  const [passwordRecovery, setPasswordRecovery] = useState(false)
 
   useEffect(() => {
     void loadSession()
+
+    if (!supabase) return
+    const { data: subscription } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === 'PASSWORD_RECOVERY' && session?.user) {
+        setPasswordRecovery(true)
+        void loadProfile(session.user.id, session.user.email || '')
+        setLoading(false)
+      }
+    })
+    return () => subscription.subscription.unsubscribe()
   }, [])
 
   async function loadSession() {
@@ -109,15 +129,17 @@ function App() {
       mustChangePassword = false
     }
 
-    setUser({
+    const profile: UserProfile = {
       id,
       email: cleanEmail,
       role,
       full_name: fullName,
       unit,
       must_change_password: mustChangePassword
-    })
+    }
+    setUser(profile)
     await loadInventories()
+    await loadNotifications(profile)
   }
 
   async function loadInventories() {
@@ -128,6 +150,31 @@ function App() {
       .order('updated_at', { ascending: false })
 
     setInventories((data || []) as Inventory[])
+  }
+
+  async function loadNotifications(profile: UserProfile) {
+    if (!supabase) return
+    let query = supabase
+      .from('notifications')
+      .select('*, inventories(title)')
+      .order('created_at', { ascending: false })
+
+    query = isManagerProfile(profile)
+      ? query.or(`recipient_scope.eq.managers,and(recipient_scope.eq.user,recipient_id.eq.${profile.id})`)
+      : query.eq('recipient_scope', 'user').eq('recipient_id', profile.id)
+
+    const { data, error } = await query
+    if (error) {
+      console.warn('Notice loading notifications:', error)
+      return
+    }
+
+    setNotifications(
+      (data || []).map((row: any) => ({
+        ...row,
+        inventory_title: row.inventories?.title
+      }))
+    )
   }
 
   async function signIn(email: string, password: string) {
@@ -186,6 +233,7 @@ function App() {
     setUser(null)
     setEditing(null)
     setInventories([])
+    setPasswordRecovery(false)
   }
 
   async function saveInventory(next: Inventory) {
@@ -197,6 +245,9 @@ function App() {
     }
 
     if (supabase) {
+      const previous = inventories.find(i => i.id === next.id)
+      const wasJustSubmitted = next.status === 'concluido' && previous?.status !== 'concluido'
+
       const { data, error } = next.id.startsWith('draft-')
         ? await supabase.from('inventories').insert(payload).select().single()
         : await supabase.from('inventories').update(payload).eq('id', next.id).select().single()
@@ -204,6 +255,21 @@ function App() {
       if (error) throw error
       setEditing(data as Inventory)
       await loadInventories()
+
+      if (wasJustSubmitted && user) {
+        const saved = data as Inventory
+        try {
+          await supabase.from('notifications').insert({
+            inventory_id: saved.id,
+            sender_id: user.id,
+            recipient_scope: 'managers',
+            type: 'submitted'
+          })
+          await loadNotifications(user)
+        } catch (err) {
+          console.warn('Notice creating submission notification:', err)
+        }
+      }
     } else {
       const saved = {
         ...next,
@@ -243,6 +309,7 @@ function App() {
     }
 
     setUser(prev => (prev ? { ...prev, must_change_password: false } : null))
+    setPasswordRecovery(false)
   }
 
   async function handleCreateUser(params: {
@@ -313,11 +380,65 @@ function App() {
     exportInventoriesToCsv(inventories, unitFilter)
   }
 
+  async function handleReturnInventory(inventory: Inventory, message: string) {
+    if (!supabase || !user) return
+    const { error } = await supabase
+      .from('inventories')
+      .update({ status: 'rascunho' })
+      .eq('id', inventory.id)
+    if (error) throw error
+
+    try {
+      await supabase.from('notifications').insert({
+        inventory_id: inventory.id,
+        sender_id: user.id,
+        recipient_id: inventory.owner_id,
+        recipient_scope: 'user',
+        type: 'returned',
+        message
+      })
+    } catch (err) {
+      console.warn('Notice creating return notification:', err)
+    }
+
+    await loadInventories()
+    await loadNotifications(user)
+  }
+
+  async function handleMarkNotificationRead(id: string) {
+    setNotifications(prev => prev.map(n => (n.id === id ? { ...n, read: true } : n)))
+    if (!supabase) return
+    try {
+      await supabase.from('notifications').update({ read: true }).eq('id', id)
+    } catch (err) {
+      console.warn('Notice marking notification read:', err)
+    }
+  }
+
   if (loading) {
     return (
       <main className="loading-screen" style={{ display: 'grid', placeItems: 'center', height: '100vh' }}>
         <p>Carregando plataforma de inventário LGPD...</p>
       </main>
+    )
+  }
+
+  // Usuário clicou no link de "Esqueci a senha" recebido por e-mail
+  if (passwordRecovery) {
+    if (!user) {
+      return (
+        <main className="loading-screen" style={{ display: 'grid', placeItems: 'center', height: '100vh' }}>
+          <p>Carregando plataforma de inventário LGPD...</p>
+        </main>
+      )
+    }
+    return (
+      <ForcePasswordChangeView
+        user={user}
+        onPasswordChanged={handlePasswordChanged}
+        onLogout={signOut}
+        mode="recovery"
+      />
     )
   }
 
@@ -361,6 +482,9 @@ function App() {
     <DashboardView
       user={user}
       inventories={inventories}
+      notifications={notifications}
+      onMarkNotificationRead={handleMarkNotificationRead}
+      onReturnInventory={handleReturnInventory}
       onNew={() =>
         setEditing({
           id: 'draft-' + crypto.randomUUID(),

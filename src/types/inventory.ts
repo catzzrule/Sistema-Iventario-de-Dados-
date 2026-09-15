@@ -45,11 +45,27 @@ export type FormData = {
 
 export type Inventory = {
   id: string
+  owner_id?: string
   title: string
   reference_id: string
   updated_at: string
   status: 'rascunho' | 'concluido' | string
   form_data: FormData
+}
+
+export type NotificationType = 'submitted' | 'returned'
+
+export type AppNotification = {
+  id: string
+  inventory_id: string | null
+  sender_id: string
+  recipient_id: string | null
+  recipient_scope: 'user' | 'managers'
+  type: NotificationType
+  message: string | null
+  read: boolean
+  created_at: string
+  inventory_title?: string
 }
 
 export type RiskLevel = 'alto' | 'medio' | 'baixo'

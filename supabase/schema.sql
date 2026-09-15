@@ -65,3 +65,52 @@ create policy "inventories delete own" on public.inventories for delete using (o
 -- Para promover o usuário da TI a Administrador / Master:
 -- update public.profiles set role = 'admin', must_change_password = false where id = 'UUID_DO_USUARIO';
 
+-- ==========================================================================
+-- NOTIFICAÇÕES (caixa de entrada de envio/devolução de processos)
+-- ==========================================================================
+create table if not exists public.notifications (
+  id uuid primary key default gen_random_uuid(),
+  inventory_id uuid references public.inventories(id) on delete cascade,
+  sender_id uuid not null references public.profiles(id) on delete cascade,
+  recipient_id uuid references public.profiles(id) on delete cascade,
+  recipient_scope text not null check (recipient_scope in ('user', 'managers')),
+  type text not null check (type in ('submitted', 'returned')),
+  message text,
+  read boolean not null default false,
+  created_at timestamptz not null default now()
+);
+
+create index if not exists notifications_recipient_idx on public.notifications(recipient_scope, recipient_id);
+create index if not exists notifications_inventory_idx on public.notifications(inventory_id);
+
+alter table public.notifications enable row level security;
+
+-- Cada usuário vê as notificações endereçadas a ele; gestores (admin/master)
+-- veem também a caixa compartilhada "managers". "read" é compartilhado entre
+-- os gestores nessa caixa (marcar como lida por um gestor limpa pra todos).
+drop policy if exists "notifications select" on public.notifications;
+create policy "notifications select" on public.notifications for select using (
+  (recipient_scope = 'user' and recipient_id = auth.uid())
+  or (recipient_scope = 'managers' and public.is_admin())
+);
+
+-- Um operador só pode notificar os gestores sobre um inventário do qual é dono;
+-- um gestor só pode devolver notificando o próprio operador.
+drop policy if exists "notifications insert" on public.notifications;
+create policy "notifications insert" on public.notifications for insert with check (
+  sender_id = auth.uid()
+  and (
+    (type = 'submitted' and recipient_scope = 'managers' and exists (
+      select 1 from public.inventories i where i.id = inventory_id and i.owner_id = auth.uid()
+    ))
+    or
+    (type = 'returned' and recipient_scope = 'user' and public.is_admin())
+  )
+);
+
+drop policy if exists "notifications update read" on public.notifications;
+create policy "notifications update read" on public.notifications for update using (
+  (recipient_scope = 'user' and recipient_id = auth.uid())
+  or (recipient_scope = 'managers' and public.is_admin())
+) with check (true);
+

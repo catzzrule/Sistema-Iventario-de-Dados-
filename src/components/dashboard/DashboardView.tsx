@@ -211,6 +211,10 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           <NotificationBell
             notifications={notifications}
             onMarkRead={onMarkNotificationRead || (() => {})}
+            onOpenNotification={n => {
+              const target = inventories.find(i => i.id === n.inventory_id)
+              if (target) onEdit(target)
+            }}
           />
 
           <div className="user-pill">

@@ -1730,8 +1730,8 @@ button, input, textarea, select {
   position: absolute;
   top: calc(100% + 10px);
   right: 0;
-  width: 340px;
-  max-height: 420px;
+  width: 420px;
+  max-height: 560px;
   background: var(--bg-card);
   border: 1px solid var(--border-light);
   border-radius: var(--radius-lg);
@@ -1746,9 +1746,9 @@ button, input, textarea, select {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 14px 16px;
+  padding: 18px 20px;
   border-bottom: 1px solid var(--border-light);
-  font-size: 13.5px;
+  font-size: 15px;
   color: var(--text-main);
 }
 
@@ -1780,9 +1780,9 @@ button, input, textarea, select {
 .notification-item {
   display: flex;
   align-items: flex-start;
-  gap: 10px;
+  gap: 12px;
   width: 100%;
-  padding: 12px 16px;
+  padding: 16px 20px;
   border: none;
   border-bottom: 1px solid var(--border-light);
   background: transparent;
@@ -1804,8 +1804,8 @@ button, input, textarea, select {
 }
 
 .notification-item-icon {
-  width: 30px;
-  height: 30px;
+  width: 38px;
+  height: 38px;
   border-radius: var(--radius-full);
   display: grid;
   place-items: center;
@@ -1828,28 +1828,28 @@ button, input, textarea, select {
 }
 
 .notification-item-body p {
-  font-size: 12.5px;
+  font-size: 14px;
   color: var(--text-main);
-  line-height: 1.4;
+  line-height: 1.45;
   margin: 0;
 }
 
 .notification-item-message {
   color: var(--text-muted) !important;
   font-style: italic;
-  margin-top: 2px !important;
+  margin-top: 4px !important;
 }
 
 .notification-item-time {
   display: block;
-  font-size: 10.5px;
+  font-size: 12px;
   color: var(--text-subtle);
-  margin-top: 4px;
+  margin-top: 6px;
 }
 
 .notification-item-dot {
-  width: 7px;
-  height: 7px;
+  width: 8px;
+  height: 8px;
   border-radius: var(--radius-full);
   background: var(--primary);
   flex-shrink: 0;

@@ -5,6 +5,7 @@ import { AppNotification } from '../../types/inventory'
 interface NotificationBellProps {
   notifications: AppNotification[]
   onMarkRead: (id: string) => void
+  onOpenNotification?: (notification: AppNotification) => void
 }
 
 function formatRelative(dateStr: string): string {
@@ -18,7 +19,7 @@ function formatRelative(dateStr: string): string {
   return date.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })
 }
 
-export const NotificationBell: React.FC<NotificationBellProps> = ({ notifications, onMarkRead }) => {
+export const NotificationBell: React.FC<NotificationBellProps> = ({ notifications, onMarkRead, onOpenNotification }) => {
   const [open, setOpen] = useState(false)
   const containerRef = useRef<HTMLDivElement>(null)
   const unreadCount = notifications.filter(n => !n.read).length
@@ -32,6 +33,14 @@ export const NotificationBell: React.FC<NotificationBellProps> = ({ notification
     document.addEventListener('mousedown', handleClickOutside)
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [])
+
+  function handleNotificationClick(n: AppNotification) {
+    if (!n.read) onMarkRead(n.id)
+    if (onOpenNotification) {
+      onOpenNotification(n)
+      setOpen(false)
+    }
+  }
 
   return (
     <div className="notification-bell-container" ref={containerRef}>
@@ -65,7 +74,7 @@ export const NotificationBell: React.FC<NotificationBellProps> = ({ notification
                   type="button"
                   key={n.id}
                   className={`notification-item ${n.read ? '' : 'unread'}`}
-                  onClick={() => onMarkRead(n.id)}
+                  onClick={() => handleNotificationClick(n)}
                 >
                   <div className={`notification-item-icon ${n.type}`}>
                     {n.type === 'submitted' ? <Send size={15} /> : <Undo2 size={15} />}

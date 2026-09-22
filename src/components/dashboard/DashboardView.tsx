@@ -1,11 +1,12 @@
 import React, { useState, useMemo } from 'react'
-import { AppNotification, Cycle, Inventory, ManagedProfile, UserProfile, Role } from '../../types/inventory'
+import { AppNotification, Cycle, DataSource, Inventory, ManagedProfile, Sharing, UserProfile, Role } from '../../types/inventory'
 import { getInputValue, getHighestRisk } from '../../utils/lgpdRisk'
 import { StatCard } from './StatCard'
 import { Sidebar, DashboardSection } from './Sidebar'
 import { NotificationBell } from './NotificationBell'
 import { SettingsPanel } from './SettingsPanel'
 import { InicioPanel } from './InicioPanel'
+import { DeclaracaoPanel } from './DeclaracaoPanel'
 import { RiskBadge } from '../common/RiskBadge'
 import {
   ShieldCheck,
@@ -38,10 +39,15 @@ interface DashboardViewProps {
   notifications?: AppNotification[]
   allUsers?: ManagedProfile[]
   cycle?: Cycle | null
+  dataSources?: DataSource[]
+  sharings?: Sharing[]
   onMarkNotificationRead?: (id: string) => void
   onReturnInventory?: (inventory: Inventory, message: string) => Promise<void>
   onUpdateProfile?: (updates: { full_name: string; unit: string }) => Promise<void>
   onUpdatePassword?: (newPassword: string) => Promise<void>
+  onCreateDataSource?: (params: { name: string; type: DataSource['type']; criticality: DataSource['criticality'] }) => Promise<void>
+  onCreateSharing?: (params: { recipient_name: string; legal_instrument: string; operation_id: string | null }) => Promise<void>
+  onCloseItem?: (kind: 'inventory' | 'data_source' | 'sharing', id: string, reason: string, destination: string) => Promise<void>
   onNew: () => void
   onEdit: (inventory: Inventory) => void
   onDelete?: (id: string) => Promise<void>
@@ -62,10 +68,15 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   notifications = [],
   allUsers = [],
   cycle = null,
+  dataSources = [],
+  sharings = [],
   onMarkNotificationRead,
   onReturnInventory,
   onUpdateProfile,
   onUpdatePassword,
+  onCreateDataSource,
+  onCreateSharing,
+  onCloseItem,
   onNew,
   onEdit,
   onDelete,
@@ -280,12 +291,25 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             totalCount={totalCount}
             completedCount={completedCount}
             notifications={notifications}
-            onContinue={() => setActiveView('overview')}
+            onContinue={() => setActiveView('declaracao')}
             onOpenNotification={n => {
               const target = inventories.find(i => i.id === n.inventory_id)
               if (target) onEdit(target)
               if (!n.read) onMarkNotificationRead?.(n.id)
             }}
+          />
+        ) : activeView === 'declaracao' ? (
+          <DeclaracaoPanel
+            user={user}
+            cycle={cycle}
+            inventories={inventories}
+            dataSources={dataSources}
+            sharings={sharings}
+            onNewInventory={onNew}
+            onEditInventory={onEdit}
+            onCreateDataSource={onCreateDataSource || (async () => {})}
+            onCreateSharing={onCreateSharing || (async () => {})}
+            onCloseItem={onCloseItem || (async () => {})}
           />
         ) : (
         <>

@@ -3,6 +3,7 @@ import {
   ShieldCheck,
   Home,
   LayoutGrid,
+  FileText,
   ClipboardList,
   BarChart3,
   Building2,
@@ -16,7 +17,7 @@ const managerOnlyItems = [
   { icon: <Building2 size={18} />, label: 'Unidades e sistemas' }
 ]
 
-export type DashboardSection = 'inicio' | 'overview' | 'settings'
+export type DashboardSection = 'inicio' | 'declaracao' | 'overview' | 'settings'
 
 interface SidebarProps {
   isManager: boolean
@@ -37,6 +38,15 @@ export const Sidebar: React.FC<SidebarProps> = ({ isManager, activeView, onNavig
           <Home size={18} />
           <span>Início</span>
           {activeView === 'inicio' && <span className="sidebar-active-dot" aria-hidden="true" />}
+        </button>
+        <button
+          type="button"
+          className={`sidebar-nav-item ${activeView === 'declaracao' ? 'active' : ''}`}
+          onClick={() => onNavigate('declaracao')}
+        >
+          <FileText size={18} />
+          <span>Minha declaração</span>
+          {activeView === 'declaracao' && <span className="sidebar-active-dot" aria-hidden="true" />}
         </button>
         <button
           type="button"

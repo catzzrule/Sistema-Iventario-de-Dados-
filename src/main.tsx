@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react'
 import { createRoot } from 'react-dom/client'
 import { configured, supabase } from './supabase'
-import { Inventory, UserProfile, Role, AppNotification, ManagedProfile, Cycle } from './types/inventory'
+import { Inventory, UserProfile, Role, AppNotification, ManagedProfile, Cycle, DataSource, Sharing } from './types/inventory'
 import { initialForm } from './utils/lgpdRisk'
 import { exportInventoriesToCsv } from './utils/exportCsv'
 import { LoginView } from './components/auth/LoginView'
@@ -41,6 +41,8 @@ function App() {
   const [notifications, setNotifications] = useState<AppNotification[]>([])
   const [allUsers, setAllUsers] = useState<ManagedProfile[]>([])
   const [cycle, setCycle] = useState<Cycle | null>(null)
+  const [dataSources, setDataSources] = useState<DataSource[]>([])
+  const [sharings, setSharings] = useState<Sharing[]>([])
   const [editing, setEditing] = useState<Inventory | null>(null)
   const [loading, setLoading] = useState(true)
   const [passwordRecovery, setPasswordRecovery] = useState(false)
@@ -151,6 +153,8 @@ function App() {
     await loadInventories()
     await loadNotifications(profile)
     await loadCurrentCycle()
+    await loadDataSources()
+    await loadSharings()
     if (isManagerProfile(profile)) {
       await loadAllUsers()
     }
@@ -171,6 +175,81 @@ function App() {
       return
     }
     setCycle((data as Cycle) || null)
+  }
+
+  async function loadDataSources() {
+    if (!supabase) return
+    const { data, error } = await supabase
+      .from('data_sources')
+      .select('*')
+      .order('created_at', { ascending: false })
+
+    if (error) {
+      console.warn('Notice loading data sources:', error)
+      return
+    }
+    setDataSources((data || []) as DataSource[])
+  }
+
+  async function loadSharings() {
+    if (!supabase) return
+    const { data, error } = await supabase
+      .from('sharings')
+      .select('*')
+      .order('created_at', { ascending: false })
+
+    if (error) {
+      console.warn('Notice loading sharings:', error)
+      return
+    }
+    setSharings((data || []) as Sharing[])
+  }
+
+  async function handleCreateDataSource(params: { name: string; type: DataSource['type']; criticality: DataSource['criticality'] }) {
+    if (!supabase || !user?.unit_id || !cycle) throw new Error('Defina sua unidade em Configurações antes de cadastrar uma fonte de dados.')
+    const { error } = await supabase.from('data_sources').insert({
+      unit_id: user.unit_id,
+      cycle_id: cycle.id,
+      name: params.name,
+      type: params.type,
+      criticality: params.criticality,
+      created_by: user.id
+    })
+    if (error) throw error
+    await loadDataSources()
+  }
+
+  async function handleCreateSharing(params: { recipient_name: string; legal_instrument: string; operation_id: string | null }) {
+    if (!supabase || !user?.unit_id || !cycle) throw new Error('Defina sua unidade em Configurações antes de cadastrar um compartilhamento.')
+    const { error } = await supabase.from('sharings').insert({
+      unit_id: user.unit_id,
+      cycle_id: cycle.id,
+      operation_id: params.operation_id,
+      recipient_name: params.recipient_name,
+      legal_instrument: params.legal_instrument || null,
+      created_by: user.id
+    })
+    if (error) throw error
+    await loadSharings()
+  }
+
+  async function handleCloseItem(
+    kind: 'inventory' | 'data_source' | 'sharing',
+    id: string,
+    reason: string,
+    destination: string
+  ) {
+    if (!supabase) return
+    const table = kind === 'inventory' ? 'inventories' : kind === 'data_source' ? 'data_sources' : 'sharings'
+    const { error } = await supabase
+      .from(table)
+      .update({ item_status: 'encerrado', closure_reason: reason, closure_destination: destination })
+      .eq('id', id)
+    if (error) throw error
+
+    if (kind === 'inventory') await loadInventories()
+    else if (kind === 'data_source') await loadDataSources()
+    else await loadSharings()
   }
 
   async function loadAllUsers() {
@@ -550,10 +629,15 @@ function App() {
       notifications={notifications}
       allUsers={allUsers}
       cycle={cycle}
+      dataSources={dataSources}
+      sharings={sharings}
       onMarkNotificationRead={handleMarkNotificationRead}
       onReturnInventory={handleReturnInventory}
       onUpdateProfile={handleUpdateProfile}
       onUpdatePassword={handleUpdateOwnPassword}
+      onCreateDataSource={handleCreateDataSource}
+      onCreateSharing={handleCreateSharing}
+      onCloseItem={handleCloseItem}
       onNew={() =>
         setEditing({
           id: 'draft-' + crypto.randomUUID(),

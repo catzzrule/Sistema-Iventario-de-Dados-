@@ -30,6 +30,7 @@ interface SettingsPanelProps {
 const roleLabels: Record<Role, string> = {
   admin: 'Administrador',
   master: 'Master (TI)',
+  encarregado: 'Encarregado (DPO)',
   user: 'Operador de Dados'
 }
 

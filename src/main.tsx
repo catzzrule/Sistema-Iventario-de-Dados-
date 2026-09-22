@@ -17,7 +17,10 @@ function getRoleForEmail(email: string): Role {
   if (MASTER_TI_EMAILS.includes(clean) || clean.includes('master')) {
     return 'master'
   }
-  if (clean.includes('admin') || clean.includes('dpo')) {
+  if (clean.includes('dpo') || clean.includes('encarregado')) {
+    return 'encarregado'
+  }
+  if (clean.includes('admin') || clean.includes('gestor')) {
     return 'admin'
   }
   return 'user'
@@ -27,6 +30,7 @@ function isManagerProfile(profile: UserProfile | null): boolean {
   return (
     profile?.role === 'admin' ||
     profile?.role === 'master' ||
+    profile?.role === 'encarregado' ||
     profile?.email?.toLowerCase() === 'catzzrule65@gmail.com'
   )
 }
@@ -72,6 +76,7 @@ function App() {
     let role: Role = autoRole
     let fullName = cleanEmail === 'catzzrule65@gmail.com' ? 'Administrador TI / Master' : ''
     let unit = cleanEmail === 'catzzrule65@gmail.com' ? 'Tecnologia da Informação (TI)' : ''
+    let unitId: string | null = null
 
     // Check if password has already been changed in localStorage fallback
     const localAlreadyChanged =
@@ -90,7 +95,7 @@ function App() {
 
         const { data: profile } = await supabase
           .from('profiles')
-          .select('role, full_name, must_change_password, unit')
+          .select('role, full_name, must_change_password, unit, unit_id')
           .eq('id', id)
           .single()
 
@@ -107,6 +112,7 @@ function App() {
           }
           if (profile.full_name) fullName = profile.full_name
           if (profile.unit) unit = profile.unit
+          unitId = profile.unit_id ?? null
           if (profile.must_change_password === false) {
             mustChangePassword = false
           }
@@ -126,8 +132,8 @@ function App() {
       }
     }
 
-    // Admins and masters never have forced password change
-    if (role === 'admin' || role === 'master' || cleanEmail === 'catzzrule65@gmail.com') {
+    // Admins, encarregados e masters nunca têm troca de senha forçada
+    if (role === 'admin' || role === 'master' || role === 'encarregado' || cleanEmail === 'catzzrule65@gmail.com') {
       mustChangePassword = false
     }
 
@@ -137,6 +143,7 @@ function App() {
       role,
       full_name: fullName,
       unit,
+      unit_id: unitId,
       must_change_password: mustChangePassword
     }
     setUser(profile)
@@ -151,7 +158,7 @@ function App() {
     if (!supabase) return
     const { data, error } = await supabase
       .from('profiles')
-      .select('id, email, full_name, unit, role, created_at')
+      .select('id, email, full_name, unit, unit_id, role, created_at')
       .order('created_at', { ascending: false })
 
     if (error) {

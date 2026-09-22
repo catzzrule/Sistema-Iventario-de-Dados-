@@ -174,11 +174,18 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   const isManager =
     user?.role === 'admin' ||
     user?.role === 'master' ||
+    user?.role === 'encarregado' ||
     user?.email?.toLowerCase() === 'catzzrule65@gmail.com'
 
   const displayName = user.full_name || user.email
   const roleLabel =
-    user.role === 'admin' ? 'Administrador de Dados' : user.role === 'master' ? 'Master (TI)' : 'Operador de Dados'
+    user.role === 'admin'
+      ? 'Administrador de Dados'
+      : user.role === 'master'
+      ? 'Master (TI)'
+      : user.role === 'encarregado'
+      ? 'Encarregado (DPO)'
+      : 'Operador de Dados'
   const initials = displayName
     .split(/[\s@.]+/)
     .filter(Boolean)

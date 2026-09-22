@@ -140,7 +140,11 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
               <div className="cred-row">
                 <span className="cred-label">Tipo de Perfil:</span>
                 <span className="cred-val">
-                  {createdData.role === 'admin' ? 'Administrador / DPO' : 'Usuário Comum (Preenchedor)'}
+                  {createdData.role === 'admin'
+                    ? 'Gestor da Unidade'
+                    : createdData.role === 'encarregado'
+                    ? 'Encarregado (DPO)'
+                    : 'Usuário Comum (Preenchedor)'}
                 </span>
               </div>
               <div className="cred-row">
@@ -229,8 +233,9 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
                   onChange={e => setRole(e.target.value as Role)}
                   className="custom-select-large select-compact"
                 >
-                  <option value="user">👤 Usuário Comum (Preenchedor — Troca Obrigatória)</option>
-                  <option value="admin">🛡️ Administrador / Gestor / DPO (Acesso Completo)</option>
+                  <option value="user">👤 Ponto Focal / Usuário Comum (Preenchedor — Troca Obrigatória)</option>
+                  <option value="admin">🛡️ Gestor de Unidade (aprova a declaração da própria unidade)</option>
+                  <option value="encarregado">🏛️ Encarregado (DPO) — visão de toda a instituição</option>
                 </select>
               </div>
             </div>

@@ -216,6 +216,7 @@ export const InventoryFormView: React.FC<InventoryFormViewProps> = ({
   const isManager =
     user?.role === 'admin' ||
     user?.role === 'master' ||
+    user?.role === 'encarregado' ||
     user?.email?.toLowerCase() === 'catzzrule65@gmail.com'
 
   return (

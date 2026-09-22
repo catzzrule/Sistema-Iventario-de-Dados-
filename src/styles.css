@@ -2929,5 +2929,10 @@ button, input, textarea, select {
   color: var(--primary-dark);
 }
 
+.user-role-badge.role-encarregado {
+  background: #fff7ed;
+  color: #c2410c;
+}
+
 
 

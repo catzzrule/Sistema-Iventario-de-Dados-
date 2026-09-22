@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react'
 import { createRoot } from 'react-dom/client'
 import { configured, supabase } from './supabase'
-import { Inventory, UserProfile, Role, AppNotification, ManagedProfile, Cycle, DataSource, Sharing } from './types/inventory'
+import { Inventory, UserProfile, Role, AppNotification, ManagedProfile, Cycle, DataSource, Sharing, UnitDeclaration } from './types/inventory'
 import { initialForm } from './utils/lgpdRisk'
 import { exportInventoriesToCsv } from './utils/exportCsv'
 import { LoginView } from './components/auth/LoginView'
@@ -43,6 +43,7 @@ function App() {
   const [cycle, setCycle] = useState<Cycle | null>(null)
   const [dataSources, setDataSources] = useState<DataSource[]>([])
   const [sharings, setSharings] = useState<Sharing[]>([])
+  const [unitDeclarations, setUnitDeclarations] = useState<UnitDeclaration[]>([])
   const [editing, setEditing] = useState<Inventory | null>(null)
   const [loading, setLoading] = useState(true)
   const [passwordRecovery, setPasswordRecovery] = useState(false)
@@ -155,6 +156,7 @@ function App() {
     await loadCurrentCycle()
     await loadDataSources()
     await loadSharings()
+    await loadUnitDeclarations()
     if (isManagerProfile(profile)) {
       await loadAllUsers()
     }
@@ -250,6 +252,110 @@ function App() {
     if (kind === 'inventory') await loadInventories()
     else if (kind === 'data_source') await loadDataSources()
     else await loadSharings()
+  }
+
+  async function loadUnitDeclarations() {
+    if (!supabase) return
+    const { data, error } = await supabase
+      .from('unit_declarations')
+      .select('*')
+      .order('submitted_at', { ascending: false, nullsFirst: false })
+
+    if (error) {
+      console.warn('Notice loading unit declarations:', error)
+      return
+    }
+    setUnitDeclarations((data || []) as UnitDeclaration[])
+  }
+
+  async function logAudit(action: string, entityType: string, entityId: string, detail: string) {
+    if (!supabase || !user) return
+    try {
+      await supabase.from('audit_log').insert({
+        unit_id: user.unit_id,
+        cycle_id: cycle?.id,
+        actor_id: user.id,
+        action,
+        entity_type: entityType,
+        entity_id: entityId,
+        detail
+      })
+    } catch (err) {
+      console.warn('Notice writing audit log:', err)
+    }
+  }
+
+  async function handleSubmitDeclaration() {
+    if (!supabase || !user?.unit_id || !cycle) throw new Error('Defina sua unidade em Configurações antes de enviar a declaração.')
+
+    const existing = unitDeclarations.find(d => d.unit_id === user.unit_id && d.cycle_id === cycle.id)
+    const payload = {
+      unit_id: user.unit_id,
+      cycle_id: cycle.id,
+      status: 'em_preenchimento' as const,
+      submitted_at: new Date().toISOString(),
+      submitted_by: user.id
+    }
+
+    const { error } = existing
+      ? await supabase.from('unit_declarations').update(payload).eq('id', existing.id)
+      : await supabase.from('unit_declarations').insert(payload)
+    if (error) throw error
+
+    await logAudit('submitted', 'unit_declaration', existing?.id || '', 'Declaração enviada para aprovação do gestor.')
+    await loadUnitDeclarations()
+  }
+
+  async function handleApproveDeclaration(declaration: UnitDeclaration) {
+    if (!supabase || !user) return
+    const { error } = await supabase
+      .from('unit_declarations')
+      .update({ status: 'em_homologacao', approved_at: new Date().toISOString(), approved_by: user.id })
+      .eq('id', declaration.id)
+    if (error) throw error
+
+    if (declaration.submitted_by) {
+      try {
+        await supabase.from('notifications').insert({
+          sender_id: user.id,
+          recipient_id: declaration.submitted_by,
+          recipient_scope: 'user',
+          type: 'approved',
+          message: 'Sua declaração foi aprovada e seguiu para homologação do Encarregado.'
+        })
+      } catch (err) {
+        console.warn('Notice creating approval notification:', err)
+      }
+    }
+
+    await logAudit('approved', 'unit_declaration', declaration.id, 'Declaração aprovada e enviada ao Encarregado.')
+    await loadUnitDeclarations()
+  }
+
+  async function handleReturnDeclaration(declaration: UnitDeclaration, observation: string) {
+    if (!supabase || !user) return
+    const { error } = await supabase
+      .from('unit_declarations')
+      .update({ submitted_at: null, submitted_by: null })
+      .eq('id', declaration.id)
+    if (error) throw error
+
+    if (declaration.submitted_by) {
+      try {
+        await supabase.from('notifications').insert({
+          sender_id: user.id,
+          recipient_id: declaration.submitted_by,
+          recipient_scope: 'user',
+          type: 'returned',
+          message: observation
+        })
+      } catch (err) {
+        console.warn('Notice creating return notification:', err)
+      }
+    }
+
+    await logAudit('returned', 'unit_declaration', declaration.id, observation)
+    await loadUnitDeclarations()
   }
 
   async function loadAllUsers() {
@@ -631,6 +737,7 @@ function App() {
       cycle={cycle}
       dataSources={dataSources}
       sharings={sharings}
+      unitDeclarations={unitDeclarations}
       onMarkNotificationRead={handleMarkNotificationRead}
       onReturnInventory={handleReturnInventory}
       onUpdateProfile={handleUpdateProfile}
@@ -638,6 +745,9 @@ function App() {
       onCreateDataSource={handleCreateDataSource}
       onCreateSharing={handleCreateSharing}
       onCloseItem={handleCloseItem}
+      onSubmitDeclaration={handleSubmitDeclaration}
+      onApproveDeclaration={handleApproveDeclaration}
+      onReturnDeclaration={handleReturnDeclaration}
       onNew={() =>
         setEditing({
           id: 'draft-' + crypto.randomUUID(),

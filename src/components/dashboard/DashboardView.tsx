@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react'
-import { AppNotification, Cycle, DataSource, Inventory, ManagedProfile, Sharing, UserProfile, Role } from '../../types/inventory'
+import { AppNotification, Cycle, DataSource, Inventory, ManagedProfile, Sharing, UnitDeclaration, UserProfile, Role } from '../../types/inventory'
 import { getInputValue, getHighestRisk } from '../../utils/lgpdRisk'
 import { StatCard } from './StatCard'
 import { Sidebar, DashboardSection } from './Sidebar'
@@ -7,6 +7,7 @@ import { NotificationBell } from './NotificationBell'
 import { SettingsPanel } from './SettingsPanel'
 import { InicioPanel } from './InicioPanel'
 import { DeclaracaoPanel } from './DeclaracaoPanel'
+import { AprovacoesPanel } from './AprovacoesPanel'
 import { RiskBadge } from '../common/RiskBadge'
 import {
   ShieldCheck,
@@ -41,6 +42,7 @@ interface DashboardViewProps {
   cycle?: Cycle | null
   dataSources?: DataSource[]
   sharings?: Sharing[]
+  unitDeclarations?: UnitDeclaration[]
   onMarkNotificationRead?: (id: string) => void
   onReturnInventory?: (inventory: Inventory, message: string) => Promise<void>
   onUpdateProfile?: (updates: { full_name: string; unit: string }) => Promise<void>
@@ -48,6 +50,9 @@ interface DashboardViewProps {
   onCreateDataSource?: (params: { name: string; type: DataSource['type']; criticality: DataSource['criticality'] }) => Promise<void>
   onCreateSharing?: (params: { recipient_name: string; legal_instrument: string; operation_id: string | null }) => Promise<void>
   onCloseItem?: (kind: 'inventory' | 'data_source' | 'sharing', id: string, reason: string, destination: string) => Promise<void>
+  onSubmitDeclaration?: () => Promise<void>
+  onApproveDeclaration?: (declaration: UnitDeclaration) => Promise<void>
+  onReturnDeclaration?: (declaration: UnitDeclaration, observation: string) => Promise<void>
   onNew: () => void
   onEdit: (inventory: Inventory) => void
   onDelete?: (id: string) => Promise<void>
@@ -70,6 +75,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   cycle = null,
   dataSources = [],
   sharings = [],
+  unitDeclarations = [],
   onMarkNotificationRead,
   onReturnInventory,
   onUpdateProfile,
@@ -77,6 +83,9 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   onCreateDataSource,
   onCreateSharing,
   onCloseItem,
+  onSubmitDeclaration,
+  onApproveDeclaration,
+  onReturnDeclaration,
   onNew,
   onEdit,
   onDelete,
@@ -90,7 +99,20 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     user?.role === 'encarregado' ||
     user?.email?.toLowerCase() === 'catzzrule65@gmail.com'
 
-  const [activeView, setActiveView] = useState<DashboardSection>(isManager ? 'overview' : 'inicio')
+  const [activeView, setActiveView] = useState<DashboardSection>(isManager ? 'aprovacoes' : 'inicio')
+
+  const pendingApprovalsCount = useMemo(
+    () =>
+      unitDeclarations.filter(
+        d => d.unit_id === user.unit_id && d.cycle_id === cycle?.id && d.submitted_at && d.status === 'em_preenchimento'
+      ).length,
+    [unitDeclarations, user.unit_id, cycle]
+  )
+
+  const myUnitDeclaration = useMemo(
+    () => unitDeclarations.find(d => d.unit_id === user.unit_id && d.cycle_id === cycle?.id) || null,
+    [unitDeclarations, user.unit_id, cycle]
+  )
   const [searchTerm, setSearchTerm] = useState('')
   const [statusFilter, setStatusFilter] = useState<'todos' | 'concluido' | 'rascunho'>('todos')
   const [riskFilter, setRiskFilter] = useState<'todos' | 'alto' | 'medio' | 'baixo'>('todos')
@@ -271,7 +293,12 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       </header>
 
       <div className="app-body">
-        <Sidebar isManager={isManager} activeView={activeView} onNavigate={setActiveView} />
+        <Sidebar
+          isManager={isManager}
+          activeView={activeView}
+          onNavigate={setActiveView}
+          pendingApprovalsCount={pendingApprovalsCount}
+        />
 
         {/* Main Content Container */}
         <main className="dashboard-content">
@@ -305,11 +332,26 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             inventories={inventories}
             dataSources={dataSources}
             sharings={sharings}
+            declaration={myUnitDeclaration}
             onNewInventory={onNew}
             onEditInventory={onEdit}
             onCreateDataSource={onCreateDataSource || (async () => {})}
             onCreateSharing={onCreateSharing || (async () => {})}
             onCloseItem={onCloseItem || (async () => {})}
+            onSubmitDeclaration={onSubmitDeclaration}
+          />
+        ) : activeView === 'aprovacoes' ? (
+          <AprovacoesPanel
+            user={user}
+            cycle={cycle}
+            inventories={inventories}
+            dataSources={dataSources}
+            sharings={sharings}
+            unitDeclarations={unitDeclarations}
+            allUsers={allUsers}
+            onApprove={onApproveDeclaration || (async () => {})}
+            onReturn={onReturnDeclaration || (async () => {})}
+            onOpenInventory={onEdit}
           />
         ) : (
         <>

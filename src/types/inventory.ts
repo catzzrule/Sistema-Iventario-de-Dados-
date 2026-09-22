@@ -142,7 +142,7 @@ export type DataSourceColumn = {
   created_at: string
 }
 
-export type NotificationType = 'submitted' | 'returned'
+export type NotificationType = 'submitted' | 'returned' | 'approved'
 
 export type AppNotification = {
   id: string

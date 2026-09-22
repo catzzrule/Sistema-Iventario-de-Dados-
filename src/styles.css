@@ -1399,6 +1399,16 @@ button, input, textarea, select {
   margin-left: auto;
 }
 
+.sidebar-badge {
+  margin-left: auto;
+  padding: 1px 7px;
+  border-radius: var(--radius-full);
+  background: #fef3c7;
+  color: #b45309;
+  font-size: 10.5px;
+  font-weight: 800;
+}
+
 .sidebar-nav-item.disabled {
   color: var(--text-subtle);
   cursor: not-allowed;
@@ -3292,6 +3302,38 @@ button, input, textarea, select {
   text-align: center;
 }
 
+.declaracao-submit-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  padding: 20px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+  margin-top: 8px;
+}
+
+.declaracao-submit-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--primary-dark);
+}
+
+.declaracao-submit-status-pending {
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+.declaracao-submit-status-done {
+  color: #a21caf;
+}
+
 .declaracao-item {
   display: flex;
   align-items: center;
@@ -3354,6 +3396,193 @@ button, input, textarea, select {
   }
   .declaracao-item-actions {
     width: 100%;
+  }
+}
+
+/* ==========================================================================
+   APROVAÇÕES (Gestor)
+   ========================================================================== */
+.aprovacoes-panel {
+  max-width: 1200px;
+}
+
+.aprovacoes-title {
+  font-size: 22px;
+  font-weight: 800;
+  color: var(--text-main);
+  margin-bottom: 8px;
+}
+
+.aprovacoes-subtitle {
+  font-size: 13.5px;
+  color: var(--text-muted);
+  max-width: 720px;
+  line-height: 1.5;
+  margin-bottom: 24px;
+}
+
+.aprovacoes-empty-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 48px 24px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-lg);
+  text-align: center;
+  color: var(--text-subtle);
+  font-size: 13.5px;
+  max-width: 480px;
+}
+
+.aprovacoes-grid {
+  display: grid;
+  grid-template-columns: 1fr 320px;
+  gap: 20px;
+  align-items: start;
+}
+
+.aprovacoes-main {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  min-width: 0;
+}
+
+.aprovacoes-stats-row {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 14px;
+}
+
+.aprovacoes-stat {
+  padding: 16px;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border-light);
+  background: var(--bg-card);
+  text-align: center;
+}
+
+.aprovacoes-stat strong {
+  display: block;
+  font-size: 26px;
+  font-weight: 800;
+  margin-bottom: 2px;
+}
+
+.aprovacoes-stat span {
+  font-size: 11.5px;
+  color: var(--text-subtle);
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+
+.aprovacoes-stat-warning strong { color: #b45309; }
+.aprovacoes-stat-danger strong { color: #b91c1c; }
+.aprovacoes-stat-success strong { color: var(--primary-dark); }
+
+.aprovacoes-card {
+  padding: 0;
+}
+
+.aprovacoes-card-header {
+  padding: 20px 20px 14px;
+}
+
+.aprovacoes-card-header h2 {
+  font-size: 14.5px;
+  font-weight: 800;
+  color: var(--text-main);
+}
+
+.aprovacoes-card-subtitle {
+  display: block;
+  font-size: 12px;
+  color: var(--text-subtle);
+  margin-top: 2px;
+}
+
+.aprovacoes-feed-detail {
+  font-size: 12.5px;
+  color: var(--text-muted);
+  line-height: 1.4;
+  margin-top: 2px;
+}
+
+.aprovacoes-feed-author {
+  font-size: 11px;
+  color: var(--text-subtle);
+  margin-top: 2px;
+}
+
+.aprovacoes-risk-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 12px;
+  padding: 0 20px 20px;
+}
+
+.aprovacoes-risk-card {
+  padding: 14px 16px;
+  border-radius: var(--radius-md);
+}
+
+.aprovacoes-risk-level {
+  display: inline-block;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.5px;
+  margin-bottom: 4px;
+}
+
+.aprovacoes-risk-card p {
+  font-size: 12.5px;
+  line-height: 1.4;
+}
+
+.aprovacoes-decision-card {
+  position: sticky;
+  top: 20px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.aprovacoes-decision-card h3 {
+  font-size: 14px;
+  font-weight: 800;
+  color: var(--text-main);
+}
+
+.aprovacoes-decision-btn {
+  width: 100%;
+  justify-content: center;
+  padding: 12px;
+  font-size: 13.5px;
+  font-weight: 700;
+}
+
+.aprovacoes-decision-note {
+  font-size: 11.5px;
+  color: var(--text-subtle);
+  line-height: 1.4;
+}
+
+@media (max-width: 900px) {
+  .aprovacoes-grid {
+    grid-template-columns: 1fr;
+  }
+  .aprovacoes-stats-row {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .aprovacoes-decision-card {
+    position: static;
   }
 }
 

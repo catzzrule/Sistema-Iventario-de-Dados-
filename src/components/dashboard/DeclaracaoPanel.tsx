@@ -6,9 +6,11 @@ import {
   Database,
   Share2,
   ClipboardList,
-  AlertTriangle
+  AlertTriangle,
+  Send,
+  CheckCircle2
 } from 'lucide-react'
-import { Cycle, DataSource, Inventory, Sharing, UserProfile } from '../../types/inventory'
+import { Cycle, DataSource, Inventory, Sharing, UnitDeclaration, UserProfile } from '../../types/inventory'
 
 type CloseKind = 'inventory' | 'data_source' | 'sharing'
 
@@ -18,11 +20,13 @@ interface DeclaracaoPanelProps {
   inventories: Inventory[]
   dataSources: DataSource[]
   sharings: Sharing[]
+  declaration?: UnitDeclaration | null
   onNewInventory: () => void
   onEditInventory: (inventory: Inventory) => void
   onCreateDataSource: (params: { name: string; type: DataSource['type']; criticality: DataSource['criticality'] }) => Promise<void>
   onCreateSharing: (params: { recipient_name: string; legal_instrument: string; operation_id: string | null }) => Promise<void>
   onCloseItem: (kind: CloseKind, id: string, reason: string, destination: string) => Promise<void>
+  onSubmitDeclaration?: () => Promise<void>
 }
 
 const dataSourceTypeLabels: Record<DataSource['type'], string> = {
@@ -44,16 +48,19 @@ export const DeclaracaoPanel: React.FC<DeclaracaoPanelProps> = ({
   inventories,
   dataSources,
   sharings,
+  declaration = null,
   onNewInventory,
   onEditInventory,
   onCreateDataSource,
   onCreateSharing,
-  onCloseItem
+  onCloseItem,
+  onSubmitDeclaration
 }) => {
   const [closing, setClosing] = useState<{ kind: CloseKind; id: string; label: string } | null>(null)
   const [closeReason, setCloseReason] = useState('')
   const [closeDestination, setCloseDestination] = useState('')
   const [closingBusy, setClosingBusy] = useState(false)
+  const [submitting, setSubmitting] = useState(false)
 
   const [sourceModalOpen, setSourceModalOpen] = useState(false)
   const [sourceName, setSourceName] = useState('')
@@ -134,6 +141,19 @@ export const DeclaracaoPanel: React.FC<DeclaracaoPanelProps> = ({
       setSharingBusy(false)
     }
   }
+
+  async function handleSubmitDeclarationClick() {
+    if (!onSubmitDeclaration) return
+    setSubmitting(true)
+    try {
+      await onSubmitDeclaration()
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  const isSubmitted = Boolean(declaration?.submitted_at) && declaration?.status === 'em_preenchimento'
+  const isBeyondSubmission = declaration?.status === 'em_homologacao' || declaration?.status === 'homologada'
 
   return (
     <div className="declaracao-panel">
@@ -318,6 +338,33 @@ export const DeclaracaoPanel: React.FC<DeclaracaoPanelProps> = ({
           ))}
         </div>
       </section>
+
+      <div className="declaracao-submit-footer">
+        {isBeyondSubmission ? (
+          <span className="declaracao-submit-status declaracao-submit-status-done">
+            <CheckCircle2 size={15} />
+            {declaration?.status === 'homologada' ? 'Declaração homologada para este ciclo.' : 'Declaração aprovada — aguardando homologação do Encarregado.'}
+          </span>
+        ) : isSubmitted ? (
+          <span className="declaracao-submit-status">
+            <CheckCircle2 size={15} />
+            Enviada para aprovação do gestor{declaration?.submitted_at ? ` em ${new Date(declaration.submitted_at).toLocaleDateString('pt-BR')}` : ''}.
+          </span>
+        ) : (
+          <span className="declaracao-submit-status declaracao-submit-status-pending">
+            Quando terminar de revisar, envie a declaração para o seu gestor aprovar.
+          </span>
+        )}
+        <button
+          type="button"
+          className="btn-primary shadow-emerald"
+          onClick={handleSubmitDeclarationClick}
+          disabled={submitting || isSubmitted || isBeyondSubmission || !onSubmitDeclaration}
+        >
+          <Send size={16} />
+          <span>{submitting ? 'Enviando...' : 'Enviar para aprovação do gestor'}</span>
+        </button>
+      </div>
 
       {/* Modal: Nova Fonte de Dados */}
       {sourceModalOpen && (

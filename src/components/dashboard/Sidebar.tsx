@@ -4,6 +4,7 @@ import {
   Home,
   LayoutGrid,
   FileText,
+  CheckSquare,
   ClipboardList,
   BarChart3,
   Building2,
@@ -17,19 +18,32 @@ const managerOnlyItems = [
   { icon: <Building2 size={18} />, label: 'Unidades e sistemas' }
 ]
 
-export type DashboardSection = 'inicio' | 'declaracao' | 'overview' | 'settings'
+export type DashboardSection = 'inicio' | 'declaracao' | 'aprovacoes' | 'overview' | 'settings'
 
 interface SidebarProps {
   isManager: boolean
   activeView: DashboardSection
   onNavigate: (view: DashboardSection) => void
+  pendingApprovalsCount?: number
 }
 
-export const Sidebar: React.FC<SidebarProps> = ({ isManager, activeView, onNavigate }) => {
+export const Sidebar: React.FC<SidebarProps> = ({ isManager, activeView, onNavigate, pendingApprovalsCount = 0 }) => {
   return (
     <aside className="app-sidebar">
       <nav className="sidebar-nav">
         <span className="sidebar-section-label">Menu Principal</span>
+        {isManager && (
+          <button
+            type="button"
+            className={`sidebar-nav-item ${activeView === 'aprovacoes' ? 'active' : ''}`}
+            onClick={() => onNavigate('aprovacoes')}
+          >
+            <CheckSquare size={18} />
+            <span>Aprovações</span>
+            {pendingApprovalsCount > 0 && <span className="sidebar-badge">{pendingApprovalsCount}</span>}
+            {activeView === 'aprovacoes' && <span className="sidebar-active-dot" aria-hidden="true" />}
+          </button>
+        )}
         <button
           type="button"
           className={`sidebar-nav-item ${activeView === 'inicio' ? 'active' : ''}`}

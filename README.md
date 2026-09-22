@@ -72,6 +72,10 @@ Definidos em `profiles.role` (enum `app_role` no Postgres): `user`, `admin`, `ma
 
 **Classificação de risco**: `utils/lgpdRisk.ts` calcula o nível de risco (`alto`/`medio`/`baixo`) e os motivos (`riskReport()`) localmente, a partir de regras fixas (dados sensíveis, ausência de base legal, prazo de retenção, compartilhamento com terceiros, transferência internacional). Não chama nenhuma IA/API externa — isso é intencional, ver `.env.example` e a seção de segurança abaixo.
 
+## De onde vêm os campos do formulário
+
+O formulário digitaliza o **Guia 3 SGD/MGI**, o modelo oficial de inventário de dados pessoais da Secretaria de Governo Digital — a planilha está em [`docs/GUIA_INVENTARIO_DE_DADOS___TEMPLETE.xlsx`](docs/GUIA_INVENTARIO_DE_DADOS___TEMPLETE.xlsx). Ela sozinha **não é suficiente** pra recriar o formulário (tem seções sem lista de valores, e o sistema acrescentou campos técnicos que ela não prevê) — [`docs/CAMPOS-DO-INVENTARIO.md`](docs/CAMPOS-DO-INVENTARIO.md) tem o mapa completo: cada seção numerada da planilha ligada ao campo correspondente no código, quais são obrigatórios, e o que o sistema teve que definir por conta própria. Leitura obrigatória antes de mexer no formulário ou nas 28 colunas do CSV exportado.
+
 ## Banco de dados (Supabase)
 
 Tudo em [`supabase/schema.sql`](supabase/schema.sql), executado manualmente no SQL Editor (não há migration runner configurado). Principais tabelas:

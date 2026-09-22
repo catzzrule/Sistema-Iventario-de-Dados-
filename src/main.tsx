@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react'
 import { createRoot } from 'react-dom/client'
 import { configured, supabase } from './supabase'
-import { Inventory, UserProfile, Role, AppNotification, ManagedProfile } from './types/inventory'
+import { Inventory, UserProfile, Role, AppNotification, ManagedProfile, Cycle } from './types/inventory'
 import { initialForm } from './utils/lgpdRisk'
 import { exportInventoriesToCsv } from './utils/exportCsv'
 import { LoginView } from './components/auth/LoginView'
@@ -40,6 +40,7 @@ function App() {
   const [inventories, setInventories] = useState<Inventory[]>([])
   const [notifications, setNotifications] = useState<AppNotification[]>([])
   const [allUsers, setAllUsers] = useState<ManagedProfile[]>([])
+  const [cycle, setCycle] = useState<Cycle | null>(null)
   const [editing, setEditing] = useState<Inventory | null>(null)
   const [loading, setLoading] = useState(true)
   const [passwordRecovery, setPasswordRecovery] = useState(false)
@@ -149,9 +150,27 @@ function App() {
     setUser(profile)
     await loadInventories()
     await loadNotifications(profile)
+    await loadCurrentCycle()
     if (isManagerProfile(profile)) {
       await loadAllUsers()
     }
+  }
+
+  async function loadCurrentCycle() {
+    if (!supabase) return
+    const { data, error } = await supabase
+      .from('cycles')
+      .select('*')
+      .eq('status', 'aberto')
+      .order('year', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+
+    if (error) {
+      console.warn('Notice loading cycle:', error)
+      return
+    }
+    setCycle((data as Cycle) || null)
   }
 
   async function loadAllUsers() {
@@ -530,6 +549,7 @@ function App() {
       inventories={inventories}
       notifications={notifications}
       allUsers={allUsers}
+      cycle={cycle}
       onMarkNotificationRead={handleMarkNotificationRead}
       onReturnInventory={handleReturnInventory}
       onUpdateProfile={handleUpdateProfile}

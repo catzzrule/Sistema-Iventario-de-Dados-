@@ -1,10 +1,11 @@
 import React, { useState, useMemo } from 'react'
-import { AppNotification, Inventory, ManagedProfile, UserProfile, Role } from '../../types/inventory'
+import { AppNotification, Cycle, Inventory, ManagedProfile, UserProfile, Role } from '../../types/inventory'
 import { getInputValue, getHighestRisk } from '../../utils/lgpdRisk'
 import { StatCard } from './StatCard'
 import { Sidebar, DashboardSection } from './Sidebar'
 import { NotificationBell } from './NotificationBell'
 import { SettingsPanel } from './SettingsPanel'
+import { InicioPanel } from './InicioPanel'
 import { RiskBadge } from '../common/RiskBadge'
 import {
   ShieldCheck,
@@ -36,6 +37,7 @@ interface DashboardViewProps {
   inventories: Inventory[]
   notifications?: AppNotification[]
   allUsers?: ManagedProfile[]
+  cycle?: Cycle | null
   onMarkNotificationRead?: (id: string) => void
   onReturnInventory?: (inventory: Inventory, message: string) => Promise<void>
   onUpdateProfile?: (updates: { full_name: string; unit: string }) => Promise<void>
@@ -59,6 +61,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   inventories,
   notifications = [],
   allUsers = [],
+  cycle = null,
   onMarkNotificationRead,
   onReturnInventory,
   onUpdateProfile,
@@ -70,7 +73,13 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   onExport,
   onCreateUser
 }) => {
-  const [activeView, setActiveView] = useState<DashboardSection>('overview')
+  const isManager =
+    user?.role === 'admin' ||
+    user?.role === 'master' ||
+    user?.role === 'encarregado' ||
+    user?.email?.toLowerCase() === 'catzzrule65@gmail.com'
+
+  const [activeView, setActiveView] = useState<DashboardSection>(isManager ? 'overview' : 'inicio')
   const [searchTerm, setSearchTerm] = useState('')
   const [statusFilter, setStatusFilter] = useState<'todos' | 'concluido' | 'rascunho'>('todos')
   const [riskFilter, setRiskFilter] = useState<'todos' | 'alto' | 'medio' | 'baixo'>('todos')
@@ -171,12 +180,6 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     }
   }
 
-  const isManager =
-    user?.role === 'admin' ||
-    user?.role === 'master' ||
-    user?.role === 'encarregado' ||
-    user?.email?.toLowerCase() === 'catzzrule65@gmail.com'
-
   const displayName = user.full_name || user.email
   const roleLabel =
     user.role === 'admin'
@@ -197,14 +200,38 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     <div className="app-shell">
       {/* Full-width Navigation Header */}
       <header className="app-header">
-        <div className="header-brand">
-          <div className="brand-logo shadow-emerald">
-            <ShieldCheck size={26} />
+        <div className="header-left">
+          <div className="header-brand">
+            <div className="brand-logo shadow-emerald">
+              <ShieldCheck size={26} />
+            </div>
+            <div>
+              <span className="brand-title">Inventário LGPD</span>
+              <span className="brand-subtitle">Plataforma de Governança de Dados</span>
+            </div>
           </div>
-          <div>
-            <span className="brand-title">Inventário LGPD</span>
-            <span className="brand-subtitle">Plataforma de Governança de Dados</span>
-          </div>
+
+          {cycle && (
+            <div className="cycle-badge">
+              <span className="cycle-badge-label">{cycle.label}</span>
+              {cycle.deadline && (
+                <>
+                  <span className="cycle-badge-dot" aria-hidden="true" />
+                  <span className="cycle-badge-deadline">
+                    prazo {new Date(cycle.deadline + 'T00:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })}
+                  </span>
+                  <span className="cycle-badge-countdown">
+                    {(() => {
+                      const days = Math.ceil(
+                        (new Date(cycle.deadline + 'T00:00:00').getTime() - new Date().setHours(0, 0, 0, 0)) / 86400000
+                      )
+                      return days >= 0 ? `faltam ${days} dias` : 'prazo encerrado'
+                    })()}
+                  </span>
+                </>
+              )}
+            </div>
+          )}
         </div>
 
         <div className="header-actions">
@@ -245,6 +272,20 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             onUpdateProfile={onUpdateProfile || (async () => {})}
             onUpdatePassword={onUpdatePassword || (async () => {})}
             onCreateUser={onCreateUser}
+          />
+        ) : activeView === 'inicio' ? (
+          <InicioPanel
+            user={user}
+            cycle={cycle}
+            totalCount={totalCount}
+            completedCount={completedCount}
+            notifications={notifications}
+            onContinue={() => setActiveView('overview')}
+            onOpenNotification={n => {
+              const target = inventories.find(i => i.id === n.inventory_id)
+              if (target) onEdit(target)
+              if (!n.read) onMarkNotificationRead?.(n.id)
+            }}
           />
         ) : (
         <>

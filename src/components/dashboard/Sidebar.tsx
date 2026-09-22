@@ -1,6 +1,7 @@
 import React from 'react'
 import {
   ShieldCheck,
+  Home,
   LayoutGrid,
   ClipboardList,
   BarChart3,
@@ -15,7 +16,7 @@ const managerOnlyItems = [
   { icon: <Building2 size={18} />, label: 'Unidades e sistemas' }
 ]
 
-export type DashboardSection = 'overview' | 'settings'
+export type DashboardSection = 'inicio' | 'overview' | 'settings'
 
 interface SidebarProps {
   isManager: boolean
@@ -28,6 +29,15 @@ export const Sidebar: React.FC<SidebarProps> = ({ isManager, activeView, onNavig
     <aside className="app-sidebar">
       <nav className="sidebar-nav">
         <span className="sidebar-section-label">Menu Principal</span>
+        <button
+          type="button"
+          className={`sidebar-nav-item ${activeView === 'inicio' ? 'active' : ''}`}
+          onClick={() => onNavigate('inicio')}
+        >
+          <Home size={18} />
+          <span>Início</span>
+          {activeView === 'inicio' && <span className="sidebar-active-dot" aria-hidden="true" />}
+        </button>
         <button
           type="button"
           className={`sidebar-nav-item ${activeView === 'overview' ? 'active' : ''}`}

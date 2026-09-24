@@ -525,6 +525,11 @@ create policy "notifications insert" on public.notifications for insert with che
 --   encarregado (DPO)         -> master  (já tinha visão total e cadastrava usuários)
 --   master                    -> master
 
+-- 0) Coluna usada pelo app e pelo cadastro, que não existia no banco de
+-- produção (o trigger de cadastro falhava e o app não conseguia ler o
+-- perfil). Usuários existentes não são obrigados a trocar a senha.
+alter table public.profiles add column if not exists must_change_password boolean not null default false;
+
 -- 1) Papéis --------------------------------------------------------------
 alter table public.profiles drop constraint if exists profiles_role_check;
 alter table public.profiles alter column role drop default;
@@ -819,3 +824,11 @@ create policy "audit_log insert" on public.audit_log for insert with check (
   actor_id = auth.uid()
   and (unit_id is null or public.is_unit_member(unit_id) or public.is_unit_manager(unit_id))
 );
+
+-- 9) Endurecimento: funções de trigger não podem ser chamadas pela API ------
+-- (os triggers continuam funcionando normalmente).
+revoke execute on function public.guard_profile_privileges() from public, anon, authenticated;
+revoke execute on function public.guard_unit_declaration() from public, anon, authenticated;
+revoke execute on function public.handle_new_user() from public, anon, authenticated;
+revoke execute on function public.inventories_set_scope() from public, anon, authenticated;
+alter function public.inventory_field_answered(jsonb, text) set search_path = public;

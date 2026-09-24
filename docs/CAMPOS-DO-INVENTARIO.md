@@ -34,20 +34,26 @@ Cada linha abaixo é: **nº da seção na planilha** → **rótulo mostrado no f
 | 5.2 | Fonte de coleta dos dados | `data_source` | Sim |
 | 6.1 | Hipótese legal / Base legal (Art. 7º/11º) | `legal_basis` | Sim |
 | 6.2 | Finalidade específica | `purpose` | Sim |
-| 6.3 | Previsão legal | `legal_provision` | **Não implementado** — existe no tipo `FormData` mas não tem campo no formulário ainda |
+| 6.3 | Previsão legal | `legal_provision` | Não |
+| 6.4 | Resultados pretendidos para o titular | `expected_results` | Não |
+| 6.5 | Benefícios esperados para o órgão/sociedade | `expected_benefits` | Não |
 | 7.x | Categorias de Dados Pessoais (as ~40 subcategorias da planilha viraram grupos de chips — ver `categoryGroups` em [`lgpdRisk.ts`](../src/utils/lgpdRisk.ts)) | `data_categories` (array) | Sim (≥1) |
+| 7.x "Descrição" | Descrição dos dados coletados nessas categorias | `data_categories_description` | Não |
 | 7.x | Tempo de retenção | `retention_period` | Sim |
 | 7.x | Nome da Base de Dados | `database` | Não |
 | 8.x | Categorias de Dados Sensíveis (Art. 5º, II) | `sensitive_categories` (array, lista fixa em `sensitiveCategories` no `lgpdRisk.ts`) | Não (mas afeta o risco) |
+| 8.x "Descrição" | Descrição dos dados sensíveis coletados | `sensitive_categories_description` | Não |
 | 9.1 | Frequência do tratamento | `frequency` | Não |
 | 9.2 | Quantidade de titulares | `data_volume` | Não |
 | 10.1 / 10.2 | Descrição dos grupos de titulares | `data_subjects` | Sim |
 | 10.3 | Trata dados de crianças e adolescentes | `vulnerable_groups` inclui `'criancas'` | Não |
 | 10.4 | Trata dados de outros grupos vulneráveis | `vulnerable_groups` inclui `'vulneraveis'` | Não |
 | 11.x | Compartilhamento com terceiros (instituição, dados, finalidade) | `sharing` (array de `{ institution, data, purpose }`, editado no componente [`SharingTable`](../src/components/inventory/SharingTable.tsx)) | Não |
-| 12.1 | Medidas de segurança/privacidade | `security` | Sim (mín. 15 caracteres) |
-| 13.1 | Transferência internacional (país, dados, garantia) | `international_transfer` (texto livre — ver observação abaixo) | Não |
-| 14.x | Contrato(s) de TI relacionados | `contracts` | Não |
+| 12.x | Tipo de medida de segurança e privacidade | `security_type` | Não |
+| 12.1 | Descrição do(s) controle(s) de segurança | `security` | Sim (mín. 15 caracteres) |
+| 13.x | Transferência internacional (país, dados, garantia) — uma linha por organização | `international_transfers` (array de `{ country, data, guarantee }`, editado no componente [`TransferTable`](../src/components/inventory/TransferTable.tsx)) | Não |
+| 14.x | Contrato(s) de TI (nº processo, objeto, e-mail do gestor) — uma linha por contrato | `contracts_list` (array de `{ number, object, managerEmail }`, editado no componente [`ContractsTable`](../src/components/inventory/ContractsTable.tsx)) | Não |
+| — | *(campos legados, mantidos só para não perder dados de inventários salvos antes dessa mudança — a UI migra o texto automaticamente pra dentro da primeira linha da tabela na primeira edição)* | `international_transfer`, `contracts` | — |
 | — | *(campo do tipo, sem uso no formulário atual)* | `updated_on` | — |
 
 ## O que a planilha não define (e como o sistema resolveu)
@@ -58,7 +64,7 @@ A aba `4-Listas` do template oficial vem **sem valores** — só os títulos das
    - `sensitiveCategories` e `categoryGroups` em [`src/utils/lgpdRisk.ts`](../src/utils/lgpdRisk.ts) — as 10 categorias sensíveis (Art. 5º, II) e os grupos de dados comuns da seção 7, viraram *chips* clicáveis em vez de dropdown.
    - As opções de "Como o sistema foi desenvolvido" / arquitetura / hospedagem (seção não-numerada, específica de TI) estão hardcoded como `<option>` dentro de [`InventoryFormView.tsx`](../src/components/inventory/InventoryFormView.tsx) (linhas ~407-446) — são específicas do órgão de origem do projeto, ajuste livremente para o seu contexto.
 
-2. **Virou campo de texto livre com um `placeholder` de exemplo**, quando a variedade de respostas é grande demais pra uma lista fechada — é o caso de `legal_basis`, `security` e `international_transfer`. Se seu órgão preferir dropdown fechado nesses campos, você precisa criar essa lista de valores do zero (a planilha, como vimos, não traz uma pronta).
+2. **Virou campo de texto livre com um `placeholder` de exemplo**, quando a variedade de respostas é grande demais pra uma lista fechada — é o caso de `legal_basis`, `security`, `security_type` e das linhas de `international_transfers`/`contracts_list`. Se seu órgão preferir dropdown fechado nesses campos, você precisa criar essa lista de valores do zero (a planilha, como vimos, não traz uma pronta).
 
 Se for reconstruir o sistema, **decida essas listas de valores antes de montar as telas** — é a parte que mais gera retrabalho se deixada pra depois.
 

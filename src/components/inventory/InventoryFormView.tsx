@@ -1,7 +1,9 @@
 import React, { useState, useMemo } from 'react'
-import { Inventory, FormData, TableRow, UserProfile } from '../../types/inventory'
+import { Inventory, FormData, TableRow, TransferRow, ContractRow, UserProfile } from '../../types/inventory'
 import { categoryGroups, sensitiveCategories, riskReport, getInputValue } from '../../utils/lgpdRisk'
 import { SharingTable } from './SharingTable'
+import { TransferTable } from './TransferTable'
+import { ContractsTable } from './ContractsTable'
 import { RiskDrawer } from './RiskDrawer'
 import { RiskBadge } from '../common/RiskBadge'
 import { BorderBeam } from '@/components/ui/border-beam'
@@ -726,6 +728,36 @@ export const InventoryFormView: React.FC<InventoryFormViewProps> = ({
                       />
                       {isFieldInvalid('purpose') && <span className="error-hint">Campo obrigatório</span>}
                     </div>
+                    <div className="form-field full-width">
+                      <label htmlFor="legal_provision">6.3 — Previsão legal</label>
+                      <textarea
+                        id="legal_provision"
+                        rows={2}
+                        value={getInputValue(item.form_data, 'legal_provision')}
+                        onChange={e => updateField('legal_provision', e.target.value)}
+                        placeholder="Ex.: Lei nº 8.112/1990, Decreto nº 9.991/2019, art. 15 da Portaria XX/2020..."
+                      />
+                    </div>
+                    <div className="form-field full-width">
+                      <label htmlFor="expected_results">6.4 — Resultados pretendidos para o titular de dados</label>
+                      <textarea
+                        id="expected_results"
+                        rows={2}
+                        value={getInputValue(item.form_data, 'expected_results')}
+                        onChange={e => updateField('expected_results', e.target.value)}
+                        placeholder="Ex.: Recebimento do benefício, emissão do documento, acesso ao serviço solicitado..."
+                      />
+                    </div>
+                    <div className="form-field full-width">
+                      <label htmlFor="expected_benefits">6.5 — Benefícios esperados para o órgão, entidade ou sociedade</label>
+                      <textarea
+                        id="expected_benefits"
+                        rows={2}
+                        value={getInputValue(item.form_data, 'expected_benefits')}
+                        onChange={e => updateField('expected_benefits', e.target.value)}
+                        placeholder="Ex.: Melhoria na gestão do programa, redução de fraudes, cumprimento de política pública..."
+                      />
+                    </div>
                   </div>
                 </div>
 
@@ -753,6 +785,17 @@ export const InventoryFormView: React.FC<InventoryFormViewProps> = ({
                     </div>
                   ))}
                   {isFieldInvalid('data_categories') && <span className="error-hint">Selecione ao menos uma categoria</span>}
+
+                  <div className="form-field full-width margin-top">
+                    <label htmlFor="data_categories_description">Descrição dos dados coletados nessas categorias</label>
+                    <textarea
+                      id="data_categories_description"
+                      rows={2}
+                      value={getInputValue(item.form_data, 'data_categories_description')}
+                      onChange={e => updateField('data_categories_description', e.target.value)}
+                      placeholder="Ex.: Nome completo, CPF, data de nascimento e endereço residencial dos servidores ativos."
+                    />
+                  </div>
 
                   <div className="form-grid-2 margin-top">
                     <div className={`form-field ${isFieldInvalid('retention_period') ? 'field-error' : ''}`}>
@@ -801,6 +844,16 @@ export const InventoryFormView: React.FC<InventoryFormViewProps> = ({
                         </button>
                       )
                     })}
+                  </div>
+                  <div className="form-field full-width margin-top">
+                    <label htmlFor="sensitive_categories_description">Descrição dos dados sensíveis coletados</label>
+                    <textarea
+                      id="sensitive_categories_description"
+                      rows={2}
+                      value={getInputValue(item.form_data, 'sensitive_categories_description')}
+                      onChange={e => updateField('sensitive_categories_description', e.target.value)}
+                      placeholder="Ex.: Laudo médico de aptidão física, exigido apenas para o cargo de agente de segurança."
+                    />
                   </div>
                 </div>
 
@@ -915,8 +968,18 @@ export const InventoryFormView: React.FC<InventoryFormViewProps> = ({
                     <div className="title-icon-badge"><Lock size={18} /></div>
                     <h2>12 — Medidas de Segurança, Técnicas e Administrativas *</h2>
                   </div>
-                  <div className={`form-field full-width ${isFieldInvalid('security') ? 'field-error' : ''}`}>
-                    <label htmlFor="security">12.1 — Tipo de medida e controles de segurança aplicados *</label>
+                  <div className="form-field full-width">
+                    <label htmlFor="security_type">Tipo de medida de segurança e privacidade</label>
+                    <input
+                      id="security_type"
+                      type="text"
+                      value={getInputValue(item.form_data, 'security_type')}
+                      onChange={e => updateField('security_type', e.target.value)}
+                      placeholder="Ex.: Controle de acesso, criptografia, backup, auditoria de logs"
+                    />
+                  </div>
+                  <div className={`form-field full-width margin-top-xs ${isFieldInvalid('security') ? 'field-error' : ''}`}>
+                    <label htmlFor="security">12.1 — Descrição do(s) controle(s) de segurança aplicado(s) *</label>
                     <textarea
                       id="security"
                       rows={4}
@@ -936,16 +999,15 @@ export const InventoryFormView: React.FC<InventoryFormViewProps> = ({
                     <div className="title-icon-badge"><Globe size={18} /></div>
                     <h2>13 — Transferência Internacional de Dados Pessoais</h2>
                   </div>
-                  <div className="form-field full-width">
-                    <label htmlFor="international_transfer">13.1 — Detalhes da transferência internacional</label>
-                    <textarea
-                      id="international_transfer"
-                      rows={3}
-                      value={getInputValue(item.form_data, 'international_transfer')}
-                      onChange={e => updateField('international_transfer', e.target.value)}
-                      placeholder="Deixe em branco se não houver transferência internacional. Se houver, descreva o país de destino, fornecedor da nuvem (AWS/Azure/GCP) e garantias contratuais."
-                    />
-                  </div>
+                  <TransferTable
+                    transfers={
+                      (item.form_data.international_transfers as TransferRow[]) ||
+                      (getInputValue(item.form_data, 'international_transfer').trim()
+                        ? [{ country: '', data: '', guarantee: getInputValue(item.form_data, 'international_transfer') }]
+                        : [])
+                    }
+                    onChange={newList => updateField('international_transfers', newList)}
+                  />
                 </div>
 
                 <div className="section-block">
@@ -953,16 +1015,15 @@ export const InventoryFormView: React.FC<InventoryFormViewProps> = ({
                     <div className="title-icon-badge"><FileCode size={18} /></div>
                     <h2>14 — Contratos de Serviços / Soluções de TI Envolvidos</h2>
                   </div>
-                  <div className="form-field full-width">
-                    <label htmlFor="contracts">14.1 — Identificação dos contratos vigentes</label>
-                    <textarea
-                      id="contracts"
-                      rows={3}
-                      value={getInputValue(item.form_data, 'contracts')}
-                      onChange={e => updateField('contracts', e.target.value)}
-                      placeholder="Descreva o nº do processo SEI/Contrato, objeto contratual, vigência e contato do gestor do contrato."
-                    />
-                  </div>
+                  <ContractsTable
+                    contracts={
+                      (item.form_data.contracts_list as ContractRow[]) ||
+                      (getInputValue(item.form_data, 'contracts').trim()
+                        ? [{ number: '', object: getInputValue(item.form_data, 'contracts'), managerEmail: '' }]
+                        : [])
+                    }
+                    onChange={newList => updateField('contracts_list', newList)}
+                  />
                 </div>
 
                 {/* Direct Risk Report Inside Security Tab (Only for Gestores) */}

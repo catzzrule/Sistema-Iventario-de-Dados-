@@ -1,4 +1,4 @@
-import { Inventory, TableRow } from '../types/inventory'
+import { Inventory, TableRow, TransferRow, ContractRow } from '../types/inventory'
 import { getInputValue, riskReport } from './lgpdRisk'
 
 export function exportInventoriesToCsv(inventories: Inventory[], unitFilter?: string) {
@@ -62,6 +62,30 @@ export function exportInventoriesToCsv(inventories: Inventory[], unitFilter?: st
     const geoAndSource = [getInputValue(d, 'geography'), getInputValue(d, 'data_source')].filter(Boolean).join(' | ')
     const freqAndVol = [getInputValue(d, 'frequency'), getInputValue(d, 'data_volume')].filter(Boolean).join(' | ')
 
+    const legalBasisFull = [getInputValue(d, 'legal_basis'), getInputValue(d, 'legal_provision')].filter(Boolean).join(' | Previsão legal: ')
+    const purposeFull = [getInputValue(d, 'purpose'), getInputValue(d, 'expected_results'), getInputValue(d, 'expected_benefits')]
+      .filter(Boolean)
+      .join(' | ')
+
+    const categoriesFull = [categoriesList, getInputValue(d, 'data_categories_description')].filter(Boolean).join(' — ')
+    const sensitiveFull = [sensitiveList, getInputValue(d, 'sensitive_categories_description')].filter(Boolean).join(' — ')
+
+    const securityFull = [getInputValue(d, 'security_type'), getInputValue(d, 'security')].filter(Boolean).join(': ')
+
+    const transfersList = (d.international_transfers as TransferRow[]) || []
+    const transferText = transfersList.length
+      ? transfersList
+          .map(t => `${t.country || 'País N/A'} (Dados: ${t.data || 'N/A'}, Garantia: ${t.guarantee || 'N/A'})`)
+          .join('; ')
+      : getInputValue(d, 'international_transfer')
+
+    const contractsListValues = (d.contracts_list as ContractRow[]) || []
+    const contractsText = contractsListValues.length
+      ? contractsListValues
+          .map(c => `${c.number || 'Processo N/A'} — ${c.object || 'Objeto N/A'} (Gestor: ${c.managerEmail || 'N/A'})`)
+          .join('; ')
+      : getInputValue(d, 'contracts')
+
     return [
       getInputValue(d, 'unit') || 'Não informada',
       i.title || 'Sem título',
@@ -78,18 +102,18 @@ export function exportInventoriesToCsv(inventories: Inventory[], unitFilter?: st
       lifecycleList || 'Não especificado',
       getInputValue(d, 'flow'),
       geoAndSource || 'Não especificado',
-      getInputValue(d, 'legal_basis'),
-      getInputValue(d, 'purpose'),
-      categoriesList || 'Nenhuma selecionada',
-      sensitiveList || 'Nenhum dado sensível marcado',
+      legalBasisFull,
+      purposeFull,
+      categoriesFull || 'Nenhuma selecionada',
+      sensitiveFull || 'Nenhum dado sensível marcado',
       getInputValue(d, 'retention_period'),
       getInputValue(d, 'database'),
       freqAndVol || 'Não informado',
       getInputValue(d, 'data_subjects') + (vulnerableList ? ` (Vulneráveis: ${vulnerableList})` : ''),
       sharingList || 'Sem compartilhamento registrado',
-      getInputValue(d, 'security'),
-      getInputValue(d, 'international_transfer') || 'Não há transferência internacional',
-      getInputValue(d, 'contracts') || 'Sem contratos registrados',
+      securityFull,
+      transferText || 'Não há transferência internacional',
+      contractsText || 'Sem contratos registrados',
       highestRisk.toUpperCase(),
       riskSummaryText
     ]

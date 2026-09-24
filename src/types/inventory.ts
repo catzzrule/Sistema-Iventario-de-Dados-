@@ -39,6 +39,18 @@ export type TableRow = {
   purpose: string
 }
 
+export type TransferRow = {
+  country: string
+  data: string
+  guarantee: string
+}
+
+export type ContractRow = {
+  number: string
+  object: string
+  managerEmail: string
+}
+
 export type FormData = {
   unit?: string
   system_name?: string
@@ -61,18 +73,25 @@ export type FormData = {
   legal_basis?: string
   purpose?: string
   legal_provision?: string
+  expected_results?: string
+  expected_benefits?: string
   data_categories?: string[]
+  data_categories_description?: string
   retention_period?: string
   database?: string
   sensitive_categories?: string[]
+  sensitive_categories_description?: string
   frequency?: string
   data_volume?: string
   data_subjects?: string
   vulnerable_groups?: string[]
   sharing?: TableRow[]
+  security_type?: string
   security?: string
   international_transfer?: string
+  international_transfers?: TransferRow[]
   contracts?: string
+  contracts_list?: ContractRow[]
   [key: string]: unknown
 }
 

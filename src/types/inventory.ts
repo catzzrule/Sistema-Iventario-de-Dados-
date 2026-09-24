@@ -67,6 +67,7 @@ export type FormData = {
   dpo_email?: string
   operator_name?: string
   lifecycle?: string[]
+  lifecycle_description?: string
   flow?: string
   geography?: string
   data_source?: string

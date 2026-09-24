@@ -29,6 +29,7 @@ Cada linha abaixo é: **nº da seção na planilha** → **rótulo mostrado no f
 | 2.2 | Encarregado / DPO (nome, e-mail) | `dpo_name`, `dpo_email` | Sim |
 | 2.3 | Operador | `operator_name` | Sim |
 | 3.1 | Fases do Ciclo de Vida (Coleta, Retenção, Processamento, Compartilhamento, Eliminação) | `lifecycle` (array) | Sim (≥1) |
+| 3.1 "Em qual fase..." | Descrição de em qual fase o Operador atua | `lifecycle_description` | Não |
 | 4.1 | Descrição do fluxo de tratamento | `flow` | Sim |
 | 5.1 | Abrangência geográfica | `geography` | Sim |
 | 5.2 | Fonte de coleta dos dados | `data_source` | Sim |

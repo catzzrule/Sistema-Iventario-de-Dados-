@@ -56,7 +56,10 @@ export function exportInventoriesToCsv(inventories: Inventory[], unitFilter?: st
     // Format sensitive categories
     const sensitiveList = ((d.sensitive_categories as string[]) || []).join('; ')
     const categoriesList = ((d.data_categories as string[]) || []).join('; ')
-    const lifecycleList = ((d.lifecycle as string[]) || []).join('; ')
+    const lifecycleList = [
+      ((d.lifecycle as string[]) || []).join('; '),
+      getInputValue(d, 'lifecycle_description')
+    ].filter(Boolean).join(' — ')
     const vulnerableList = ((d.vulnerable_groups as string[]) || []).join('; ')
 
     const geoAndSource = [getInputValue(d, 'geography'), getInputValue(d, 'data_source')].filter(Boolean).join(' | ')

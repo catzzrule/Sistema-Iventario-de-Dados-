@@ -644,6 +644,17 @@ export const InventoryFormView: React.FC<InventoryFormViewProps> = ({
                     })}
                   </div>
                   {isFieldInvalid('lifecycle') && <span className="error-hint">Selecione ao menos uma fase</span>}
+
+                  <div className="form-field full-width margin-top">
+                    <label htmlFor="lifecycle_description">3.1 — Em qual fase do ciclo de vida o Operador atua</label>
+                    <textarea
+                      id="lifecycle_description"
+                      rows={2}
+                      value={getInputValue(item.form_data, 'lifecycle_description')}
+                      onChange={e => updateField('lifecycle_description', e.target.value)}
+                      placeholder="Ex.: O Operador atua na fase de Processamento, executando o cálculo do benefício a partir dos dados coletados pela área de RH."
+                    />
+                  </div>
                 </div>
 
                 <div className="section-block">

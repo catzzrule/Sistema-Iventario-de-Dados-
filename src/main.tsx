@@ -1,45 +1,48 @@
 import React, { useEffect, useState } from 'react'
 import { createRoot } from 'react-dom/client'
-import { configured, supabase } from './supabase'
-import { Inventory, UserProfile, Role, AppNotification, ManagedProfile, Cycle, DataSource, Sharing, UnitDeclaration } from './types/inventory'
+import { configured, createIsolatedAuthClient, supabase } from './supabase'
+import {
+  Inventory,
+  UserProfile,
+  Role,
+  AppNotification,
+  ManagedProfile,
+  ManagedUserUpdate,
+  Cycle,
+  DataSource,
+  Sharing,
+  UnitDeclaration,
+  Unit,
+  AuditLogEntry
+} from './types/inventory'
 import { initialForm } from './utils/lgpdRisk'
 import { exportInventoriesToCsv } from './utils/exportCsv'
+import { isManagerRole, isMasterRole, normalizeRole, ROLE_LABELS } from './utils/roles'
 import { LoginView } from './components/auth/LoginView'
 import { ForcePasswordChangeView } from './components/auth/ForcePasswordChangeView'
 import { DashboardView } from './components/dashboard/DashboardView'
 import { InventoryFormView } from './components/inventory/InventoryFormView'
 import './styles.css'
 
-const MASTER_TI_EMAILS = ['catzzrule65@gmail.com']
-
-function getRoleForEmail(email: string): Role {
-  const clean = (email || '').toLowerCase().trim()
-  if (MASTER_TI_EMAILS.includes(clean) || clean.includes('master')) {
-    return 'master'
-  }
-  if (clean.includes('dpo') || clean.includes('encarregado')) {
-    return 'encarregado'
-  }
-  if (clean.includes('admin') || clean.includes('gestor')) {
-    return 'admin'
-  }
-  return 'user'
+// Só usado no modo demonstração local (sem Supabase configurado). Com o
+// Supabase, o perfil vem SEMPRE da tabela profiles — nunca do e-mail.
+function demoRoleForEmail(email: string): Role {
+  const clean = (email || '').toLowerCase()
+  if (clean.includes('master')) return 'master'
+  if (clean.includes('gestor') || clean.includes('admin')) return 'gestor'
+  return 'ponto_focal'
 }
 
-function isManagerProfile(profile: UserProfile | null): boolean {
-  return (
-    profile?.role === 'admin' ||
-    profile?.role === 'master' ||
-    profile?.role === 'encarregado' ||
-    profile?.email?.toLowerCase() === 'catzzrule65@gmail.com'
-  )
-}
+const isManagerProfile = (profile: UserProfile | null) => isManagerRole(profile?.role)
 
 function App() {
   const [user, setUser] = useState<UserProfile | null>(null)
   const [inventories, setInventories] = useState<Inventory[]>([])
   const [notifications, setNotifications] = useState<AppNotification[]>([])
   const [allUsers, setAllUsers] = useState<ManagedProfile[]>([])
+  const [units, setUnits] = useState<Unit[]>([])
+  const [cycles, setCycles] = useState<Cycle[]>([])
+  const [auditLog, setAuditLog] = useState<AuditLogEntry[]>([])
   const [cycle, setCycle] = useState<Cycle | null>(null)
   const [dataSources, setDataSources] = useState<DataSource[]>([])
   const [sharings, setSharings] = useState<Sharing[]>([])
@@ -76,10 +79,9 @@ function App() {
 
   async function loadProfile(id: string, email: string) {
     const cleanEmail = email.toLowerCase().trim()
-    const autoRole = getRoleForEmail(cleanEmail)
-    let role: Role = autoRole
-    let fullName = cleanEmail === 'catzzrule65@gmail.com' ? 'Administrador TI / Master' : ''
-    let unit = cleanEmail === 'catzzrule65@gmail.com' ? 'Tecnologia da Informação (TI)' : ''
+    let role: Role = 'ponto_focal'
+    let fullName = ''
+    let unit = ''
     let unitId: string | null = null
 
     // Check if password has already been changed in localStorage fallback
@@ -87,7 +89,7 @@ function App() {
       localStorage.getItem('lgpd_pwd_changed_' + cleanEmail) === 'true' ||
       localStorage.getItem('lgpd_pwd_changed_' + id) === 'true'
 
-    let mustChangePassword = role === 'user' && !localAlreadyChanged
+    let mustChangePassword = !localAlreadyChanged
 
     if (supabase) {
       try {
@@ -101,34 +103,22 @@ function App() {
           .from('profiles')
           .select('role, full_name, must_change_password, unit, unit_id')
           .eq('id', id)
-          .single()
+          .maybeSingle()
 
         if (profile) {
-          if (cleanEmail === 'catzzrule65@gmail.com') {
-            role = 'master'
-            mustChangePassword = false
-            // Ensure DB profile is upgraded to master
-            if (profile.role !== 'master' || profile.must_change_password !== false) {
-              await supabase.from('profiles').update({ role: 'master', must_change_password: false }).eq('id', id)
-            }
-          } else if (profile.role) {
-            role = profile.role as Role
-          }
+          role = normalizeRole(profile.role)
           if (profile.full_name) fullName = profile.full_name
           if (profile.unit) unit = profile.unit
           unitId = profile.unit_id ?? null
-          if (profile.must_change_password === false) {
-            mustChangePassword = false
-          }
+          // O perfil no banco é a fonte da verdade (permite ao Master exigir a troca).
+          mustChangePassword = profile.must_change_password === true
         } else {
-          // If profile table entry doesn't exist yet, insert it
-          await supabase.from('profiles').upsert({
+          // Perfil ausente (conta criada antes do trigger de cadastro): cria
+          // como Ponto Focal. O banco ignora qualquer outro papel vindo daqui.
+          await supabase.from('profiles').insert({
             id,
-            role: autoRole,
-            full_name: fullName,
-            unit,
             email: cleanEmail,
-            must_change_password: autoRole === 'user'
+            must_change_password: true
           })
         }
       } catch (err) {
@@ -136,8 +126,8 @@ function App() {
       }
     }
 
-    // Admins, encarregados e masters nunca têm troca de senha forçada
-    if (role === 'admin' || role === 'master' || role === 'encarregado' || cleanEmail === 'catzzrule65@gmail.com') {
+    // Gestor e Master nunca têm troca de senha forçada
+    if (isManagerRole(role)) {
       mustChangePassword = false
     }
 
@@ -157,9 +147,66 @@ function App() {
     await loadDataSources()
     await loadSharings()
     await loadUnitDeclarations()
+    await loadUnits()
     if (isManagerProfile(profile)) {
-      await loadAllUsers()
+      await Promise.all([loadAllUsers(), loadCycles(), loadAuditLog()])
     }
+  }
+
+  async function loadUnits() {
+    if (!supabase) return
+    const { data, error } = await supabase.from('units').select('*').order('name')
+    if (error) {
+      console.warn('Notice loading units:', error)
+      return
+    }
+    setUnits((data || []) as Unit[])
+  }
+
+  async function loadCycles() {
+    if (!supabase) return
+    const { data, error } = await supabase.from('cycles').select('*').order('year', { ascending: false })
+    if (error) {
+      console.warn('Notice loading cycles:', error)
+      return
+    }
+    setCycles((data || []) as Cycle[])
+  }
+
+  async function loadAuditLog() {
+    if (!supabase) return
+    const { data, error } = await supabase
+      .from('audit_log')
+      .select('*')
+      .order('created_at', { ascending: false })
+      .limit(500)
+    if (error) {
+      console.warn('Notice loading audit log:', error)
+      return
+    }
+    setAuditLog((data || []) as AuditLogEntry[])
+  }
+
+  async function refreshReportData() {
+    await Promise.all([loadInventories(), loadUnitDeclarations(), loadUnits(), loadCycles(), loadAuditLog()])
+  }
+
+  // Resolve o nome digitado para uma unidade existente (sem diferenciar
+  // maiúsculas) ou cria uma nova. Só o Master tem permissão de criar (RLS).
+  async function resolveUnitId(unitName: string): Promise<string | null> {
+    const name = unitName.trim()
+    if (!supabase || !name) return null
+    const existing = units.find(u => u.name.toLowerCase() === name.toLowerCase())
+    if (existing) return existing.id
+
+    const { data, error } = await supabase.from('units').insert({ name }).select().single()
+    if (error) {
+      const { data: found } = await supabase.from('units').select('*').ilike('name', name).maybeSingle()
+      if (found) return (found as Unit).id
+      throw error
+    }
+    await loadUnits()
+    return (data as Unit).id
   }
 
   async function loadCurrentCycle() {
@@ -208,7 +255,7 @@ function App() {
   }
 
   async function handleCreateDataSource(params: { name: string; type: DataSource['type']; criticality: DataSource['criticality'] }) {
-    if (!supabase || !user?.unit_id || !cycle) throw new Error('Defina sua unidade em Configurações antes de cadastrar uma fonte de dados.')
+    if (!supabase || !user?.unit_id || !cycle) throw new Error('Sua unidade ainda não foi definida. Peça ao Master para vincular seu usuário a uma unidade.')
     const { error } = await supabase.from('data_sources').insert({
       unit_id: user.unit_id,
       cycle_id: cycle.id,
@@ -222,7 +269,7 @@ function App() {
   }
 
   async function handleCreateSharing(params: { recipient_name: string; legal_instrument: string; operation_id: string | null }) {
-    if (!supabase || !user?.unit_id || !cycle) throw new Error('Defina sua unidade em Configurações antes de cadastrar um compartilhamento.')
+    if (!supabase || !user?.unit_id || !cycle) throw new Error('Sua unidade ainda não foi definida. Peça ao Master para vincular seu usuário a uma unidade.')
     const { error } = await supabase.from('sharings').insert({
       unit_id: user.unit_id,
       cycle_id: cycle.id,
@@ -268,11 +315,17 @@ function App() {
     setUnitDeclarations((data || []) as UnitDeclaration[])
   }
 
-  async function logAudit(action: string, entityType: string, entityId: string, detail: string) {
+  async function logAudit(
+    action: string,
+    entityType: string,
+    entityId: string | null,
+    detail: string,
+    unitId: string | null = user?.unit_id ?? null
+  ) {
     if (!supabase || !user) return
     try {
-      await supabase.from('audit_log').insert({
-        unit_id: user.unit_id,
+      const { error } = await supabase.from('audit_log').insert({
+        unit_id: unitId,
         cycle_id: cycle?.id,
         actor_id: user.id,
         action,
@@ -280,13 +333,16 @@ function App() {
         entity_id: entityId,
         detail
       })
+      if (error) console.warn('Notice writing audit log:', error)
     } catch (err) {
       console.warn('Notice writing audit log:', err)
     }
   }
 
   async function handleSubmitDeclaration() {
-    if (!supabase || !user?.unit_id || !cycle) throw new Error('Defina sua unidade em Configurações antes de enviar a declaração.')
+    if (!supabase || !user?.unit_id || !cycle) {
+      throw new Error('Sua unidade ainda não foi definida. Peça ao Master para vincular seu usuário a uma unidade.')
+    }
 
     const existing = unitDeclarations.find(d => d.unit_id === user.unit_id && d.cycle_id === cycle.id)
     const payload = {
@@ -297,17 +353,18 @@ function App() {
       submitted_by: user.id
     }
 
-    const { error } = existing
-      ? await supabase.from('unit_declarations').update(payload).eq('id', existing.id)
-      : await supabase.from('unit_declarations').insert(payload)
+    const { data, error } = existing
+      ? await supabase.from('unit_declarations').update(payload).eq('id', existing.id).select().single()
+      : await supabase.from('unit_declarations').insert(payload).select().single()
     if (error) throw error
 
-    await logAudit('submitted', 'unit_declaration', existing?.id || '', 'Declaração enviada para aprovação do gestor.')
+    await logAudit('submitted', 'unit_declaration', (data as UnitDeclaration).id, 'Declaração enviada para aprovação do gestor.', user.unit_id)
     await loadUnitDeclarations()
   }
 
   async function handleApproveDeclaration(declaration: UnitDeclaration) {
     if (!supabase || !user) return
+    if (!isManagerProfile(user)) throw new Error('Somente o Gestor ou o Master podem aprovar a declaração.')
     const { error } = await supabase
       .from('unit_declarations')
       .update({ status: 'em_homologacao', approved_at: new Date().toISOString(), approved_by: user.id })
@@ -321,19 +378,21 @@ function App() {
           recipient_id: declaration.submitted_by,
           recipient_scope: 'user',
           type: 'approved',
-          message: 'Sua declaração foi aprovada e seguiu para homologação do Encarregado.'
+          message: 'Sua declaração foi aprovada pelo Gestor.'
         })
       } catch (err) {
         console.warn('Notice creating approval notification:', err)
       }
     }
 
-    await logAudit('approved', 'unit_declaration', declaration.id, 'Declaração aprovada e enviada ao Encarregado.')
+    await logAudit('approved', 'unit_declaration', declaration.id, 'Declaração aprovada pelo Gestor.', declaration.unit_id)
+    await loadAuditLog()
     await loadUnitDeclarations()
   }
 
   async function handleReturnDeclaration(declaration: UnitDeclaration, observation: string) {
     if (!supabase || !user) return
+    if (!isManagerProfile(user)) throw new Error('Somente o Gestor ou o Master podem devolver a declaração.')
     const { error } = await supabase
       .from('unit_declarations')
       .update({ submitted_at: null, submitted_by: null })
@@ -354,7 +413,8 @@ function App() {
       }
     }
 
-    await logAudit('returned', 'unit_declaration', declaration.id, observation)
+    await logAudit('returned', 'unit_declaration', declaration.id, observation, declaration.unit_id)
+    await loadAuditLog()
     await loadUnitDeclarations()
   }
 
@@ -411,15 +471,15 @@ function App() {
     const cleanEmail = email.toLowerCase().trim()
 
     if (!supabase) {
-      const role = getRoleForEmail(cleanEmail)
+      const role = demoRoleForEmail(cleanEmail)
       const alreadyChanged = localStorage.getItem('lgpd_pwd_changed_' + cleanEmail) === 'true'
 
       setUser({
         email: cleanEmail,
         role,
-        full_name: cleanEmail === 'catzzrule65@gmail.com' ? 'Administrador TI / Master' : '',
-        unit: cleanEmail === 'catzzrule65@gmail.com' ? 'Tecnologia da Informação (TI)' : '',
-        must_change_password: role === 'user' && !alreadyChanged
+        full_name: '',
+        unit: '',
+        must_change_password: role === 'ponto_focal' && !alreadyChanged
       })
       setInventories([])
       return
@@ -439,21 +499,14 @@ function App() {
     if (!supabase) {
       throw new Error('Configure o Supabase para cadastrar novas contas de usuário.')
     }
-    const { data, error } = await supabase.auth.signUp({ email: cleanEmail, password })
+    // O perfil é criado pelo trigger do banco sempre como Ponto Focal. Quem
+    // se cadastra sozinho escolhe a própria senha, então não é forçado a trocá-la.
+    const { error } = await supabase.auth.signUp({
+      email: cleanEmail,
+      password,
+      options: { data: { must_change_password: false } }
+    })
     if (error) throw error
-
-    if (data.user) {
-      const defaultRole = getRoleForEmail(cleanEmail)
-      try {
-        await supabase.from('profiles').upsert({
-          id: data.user.id,
-          role: defaultRole,
-          must_change_password: defaultRole === 'user'
-        })
-      } catch (err) {
-        console.warn('Profile creation notice:', err)
-      }
-    }
   }
 
   async function signOut() {
@@ -549,44 +602,46 @@ function App() {
     role: Role
     provisionalPassword?: string
   }): Promise<{ tempPassword?: string }> {
+    if (!isMasterRole(user?.role)) {
+      throw new Error('Somente o Master pode cadastrar usuários.')
+    }
     const tempPassword = params.provisionalPassword || `Lgpd@${Math.random().toString(36).slice(-6)}!`
-    const mustChange = params.role === 'user' // only regular users must change password
+    const mustChange = params.role === 'ponto_focal' // só Ponto Focal troca a senha no 1º acesso
+    const email = params.email.toLowerCase().trim()
 
     // Clear any past flag for this email so they are prompted on first login
-    localStorage.removeItem('lgpd_pwd_changed_' + params.email.toLowerCase())
+    localStorage.removeItem('lgpd_pwd_changed_' + email)
 
     if (supabase) {
-      // 1. Tenta cadastrar via signUp com a senha provisória
-      const { data, error } = await supabase.auth.signUp({
-        email: params.email,
+      const signupClient = createIsolatedAuthClient()
+      if (!signupClient) throw new Error('Supabase não configurado.')
+
+      const { data, error } = await signupClient.auth.signUp({
+        email,
         password: tempPassword,
-        options: {
-          data: {
-            full_name: params.fullName,
-            unit: params.unit,
-            must_change_password: mustChange
-          }
-        }
+        options: { data: { full_name: params.fullName, must_change_password: mustChange } }
       })
-
-      if (error) {
-        throw error
+      if (error) throw error
+      if (!data.user || data.user.identities?.length === 0) {
+        throw new Error('Já existe uma conta cadastrada com este e-mail.')
       }
 
-      if (data.user) {
-        try {
-          await supabase.from('profiles').upsert({
-            id: data.user.id,
-            role: params.role,
-            full_name: params.fullName,
-            unit: params.unit,
-            email: params.email.toLowerCase().trim(),
-            must_change_password: mustChange
-          })
-        } catch (err) {
-          console.warn('Profile upsert notice:', err)
-        }
-      }
+      // O perfil nasce Ponto Focal (trigger do banco); o Master ajusta o papel.
+      const unitId = await resolveUnitId(params.unit)
+      const { error: profileError } = await supabase
+        .from('profiles')
+        .update({
+          role: params.role,
+          full_name: params.fullName,
+          unit: params.unit.trim() || null,
+          unit_id: unitId,
+          email,
+          must_change_password: mustChange
+        })
+        .eq('id', data.user.id)
+      if (profileError) throw profileError
+
+      await logAudit('user_created', 'profile', data.user.id, `Usuário ${email} cadastrado como ${ROLE_LABELS[params.role]}.`, unitId)
       await loadAllUsers()
     }
 
@@ -595,14 +650,55 @@ function App() {
 
   async function handleUpdateProfile(updates: { full_name: string; unit: string }) {
     if (!user) return
+    // Unidade define quais dados a pessoa enxerga, então só o Master altera
+    // (o banco também bloqueia). Os demais atualizam apenas o nome.
+    const master = isMasterRole(user.role)
+    const unitId = master ? await resolveUnitId(updates.unit) : user.unit_id ?? null
+    const unit = master ? updates.unit.trim() : user.unit || ''
+
     if (supabase) {
-      const { error } = await supabase
-        .from('profiles')
-        .update({ full_name: updates.full_name, unit: updates.unit })
-        .eq('id', user.id)
+      const payload = master
+        ? { full_name: updates.full_name, unit: unit || null, unit_id: unitId }
+        : { full_name: updates.full_name }
+      const { error } = await supabase.from('profiles').update(payload).eq('id', user.id)
       if (error) throw error
     }
-    setUser(prev => (prev ? { ...prev, full_name: updates.full_name, unit: updates.unit } : null))
+    setUser(prev => (prev ? { ...prev, full_name: updates.full_name, unit, unit_id: unitId } : null))
+  }
+
+  async function handleMasterUpdateUser(targetId: string, updates: ManagedUserUpdate) {
+    if (!supabase || !isMasterRole(user?.role)) throw new Error('Somente o Master pode alterar usuários.')
+    if (targetId === user?.id && updates.role !== user.role) {
+      throw new Error('Você não pode alterar o seu próprio perfil de acesso.')
+    }
+    const unitId = await resolveUnitId(updates.unit)
+    const { error } = await supabase
+      .from('profiles')
+      .update({
+        full_name: updates.full_name,
+        role: updates.role,
+        unit: updates.unit.trim() || null,
+        unit_id: unitId
+      })
+      .eq('id', targetId)
+    if (error) throw error
+
+    await logAudit('user_updated', 'profile', targetId, `Perfil alterado para ${ROLE_LABELS[updates.role]}.`, unitId)
+    await loadAllUsers()
+  }
+
+  async function handleSendPasswordReset(email: string) {
+    if (!supabase || !isMasterRole(user?.role)) throw new Error('Somente o Master pode redefinir senhas.')
+    const redirectTo = window.location.origin + import.meta.env.BASE_URL
+    const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo })
+    if (error) throw error
+  }
+
+  async function handleForcePasswordChange(targetId: string) {
+    if (!supabase || !isMasterRole(user?.role)) throw new Error('Somente o Master pode exigir troca de senha.')
+    const { error } = await supabase.from('profiles').update({ must_change_password: true }).eq('id', targetId)
+    if (error) throw error
+    await loadAllUsers()
   }
 
   async function handleUpdateOwnPassword(newPassword: string) {
@@ -631,12 +727,16 @@ function App() {
   }
 
   async function handleReturnInventory(inventory: Inventory, message: string) {
-    if (!supabase || !user) return
-    const { error } = await supabase
+    if (!supabase || !user || !isManagerProfile(user)) return
+    const { data: updated, error } = await supabase
       .from('inventories')
       .update({ status: 'rascunho' })
       .eq('id', inventory.id)
+      .select('id')
     if (error) throw error
+    // Sem linha atualizada = a RLS negou (inventário de outra unidade).
+    if (!updated?.length) throw new Error('Você não tem permissão para devolver este inventário.')
+    await logAudit('inventory_returned', 'inventory', inventory.id, message, inventory.unit_id ?? null)
 
     try {
       await supabase.from('notifications').insert({
@@ -702,8 +802,8 @@ function App() {
     )
   }
 
-  // Se o usuário for comum e estiver com troca de senha pendente no 1º acesso
-  if (user.role === 'user' && user.must_change_password) {
+  // Se o Ponto Focal estiver com troca de senha pendente (1º acesso ou exigida pelo Master)
+  if (user.role === 'ponto_focal' && user.must_change_password) {
     return (
       <ForcePasswordChangeView
         user={user}
@@ -738,6 +838,13 @@ function App() {
       dataSources={dataSources}
       sharings={sharings}
       unitDeclarations={unitDeclarations}
+      units={units}
+      cycles={cycles}
+      auditLog={auditLog}
+      onRefreshReports={refreshReportData}
+      onUpdateUser={handleMasterUpdateUser}
+      onSendPasswordReset={handleSendPasswordReset}
+      onForcePasswordChange={handleForcePasswordChange}
       onMarkNotificationRead={handleMarkNotificationRead}
       onReturnInventory={handleReturnInventory}
       onUpdateProfile={handleUpdateProfile}
@@ -765,7 +872,7 @@ function App() {
       onDelete={deleteInventory}
       onLogout={signOut}
       onExport={handleExport}
-      onCreateUser={handleCreateUser}
+      onCreateUser={isMasterRole(user.role) ? handleCreateUser : undefined}
     />
   )
 }

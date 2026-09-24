@@ -1,6 +1,14 @@
 import React, { useState, useMemo } from 'react'
 import { Inventory, FormData, TableRow, TransferRow, ContractRow, UserProfile } from '../../types/inventory'
-import { categoryGroups, sensitiveCategories, riskReport, getInputValue } from '../../utils/lgpdRisk'
+import {
+  categoryGroups,
+  sensitiveCategories,
+  riskReport,
+  getInputValue,
+  getNotApplicable,
+  NOT_APPLICABLE_LABEL
+} from '../../utils/lgpdRisk'
+import { isManagerRole } from '../../utils/roles'
 import { SharingTable } from './SharingTable'
 import { TransferTable } from './TransferTable'
 import { ContractsTable } from './ContractsTable'
@@ -56,6 +64,7 @@ export const InventoryFormView: React.FC<InventoryFormViewProps> = ({
   const [saving, setSaving] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const [submittedAttempt, setSubmittedAttempt] = useState(false)
+  const [saveError, setSaveError] = useState('')
 
   const risks = useMemo(() => riskReport(item.form_data), [item.form_data])
 
@@ -83,43 +92,87 @@ export const InventoryFormView: React.FC<InventoryFormViewProps> = ({
     updateField(key, updated)
   }
 
+
+  // "Não se aplica": a chave do campo fica registrada em form_data.not_applicable.
+  // O campo deixa de ser obrigatório e o valor digitado é limpo, para não
+  // misturar "não se aplica" com um valor preenchido.
+  const isNA = (key: string) => getNotApplicable(item.form_data).includes(key)
+
+  // Campos de tabela que também têm um formato antigo (texto livre) a limpar.
+  const NA_LEGACY_KEYS: Record<string, string> = {
+    international_transfers: 'international_transfer',
+    contracts_list: 'contracts'
+  }
+
+  const toggleNA = (key: string, emptyValue: unknown = '') => {
+    setItem(prev => {
+      const current = getNotApplicable(prev.form_data)
+      const turningOn = !current.includes(key)
+      const form_data: FormData = {
+        ...prev.form_data,
+        not_applicable: turningOn ? [...current, key] : current.filter(k => k !== key)
+      }
+      if (turningOn && key !== 'reference_id') {
+        form_data[key] = emptyValue
+        if (NA_LEGACY_KEYS[key]) form_data[NA_LEGACY_KEYS[key]] = ''
+      }
+      return {
+        ...prev,
+        reference_id: turningOn && key === 'reference_id' ? '' : prev.reference_id,
+        form_data
+      }
+    })
+  }
+
+  const naToggle = (key: string, emptyValue: unknown = '') => (
+    <label className={`na-toggle ${isNA(key) ? 'active' : ''}`}>
+      <input type="checkbox" checked={isNA(key)} onChange={() => toggleNA(key, emptyValue)} />
+      <span>Não se aplica</span>
+    </label>
+  )
+
+  const textValue = (key: string) => (isNA(key) ? NOT_APPLICABLE_LABEL : getInputValue(item.form_data, key))
+
   // Validation rules for concluding/submitting
   const validationErrors = useMemo(() => {
     const d = item.form_data
     const errors: { tab: string; field: string; message: string }[] = []
+    const na = getNotApplicable(d)
+    // Obrigatório = sem valor E sem "Não se aplica" (mesma regra do banco).
+    const missing = (key: string) => !na.includes(key) && !getInputValue(d, key).trim()
 
     // Tab 1 (All fields mandatory)
-    if (!getInputValue(d, 'system_name').trim()) {
+    if (missing('system_name')) {
       errors.push({ tab: 'identificacao', field: 'system_name', message: '1.1 Sistema / Plataforma é obrigatório' })
     }
     if (!item.title.trim()) {
       errors.push({ tab: 'identificacao', field: 'title', message: '1.2 Nome do Serviço / Processo é obrigatório' })
     }
-    if (!item.reference_id.trim()) {
+    if (!na.includes('reference_id') && !item.reference_id.trim()) {
       errors.push({ tab: 'identificacao', field: 'reference_id', message: '1.3 Nº de Referência / ID é obrigatório' })
     }
-    if (!getInputValue(d, 'created_at').trim()) {
+    if (missing('created_at')) {
       errors.push({ tab: 'identificacao', field: 'created_at', message: '1.4 Data de criação do mapeamento é obrigatória' })
     }
-    if (!getInputValue(d, 'unit').trim()) {
+    if (missing('unit')) {
       errors.push({ tab: 'identificacao', field: 'unit', message: '1.5 Unidade / Departamento é obrigatório' })
     }
-    if (!getInputValue(d, 'controller_name').trim()) {
+    if (missing('controller_name')) {
       errors.push({ tab: 'identificacao', field: 'controller_name', message: '2.1 Controlador (Nome / Órgão) é obrigatório' })
     }
-    if (!getInputValue(d, 'controller_email').trim()) {
+    if (missing('controller_email')) {
       errors.push({ tab: 'identificacao', field: 'controller_email', message: 'E-mail do Controlador é obrigatório' })
     }
-    if (!getInputValue(d, 'controller_phone').trim()) {
+    if (missing('controller_phone')) {
       errors.push({ tab: 'identificacao', field: 'controller_phone', message: 'Telefone do Controlador é obrigatório' })
     }
-    if (!getInputValue(d, 'dpo_name').trim()) {
+    if (missing('dpo_name')) {
       errors.push({ tab: 'identificacao', field: 'dpo_name', message: '2.2 Encarregado (DPO - Nome) é obrigatório' })
     }
-    if (!getInputValue(d, 'dpo_email').trim()) {
+    if (missing('dpo_email')) {
       errors.push({ tab: 'identificacao', field: 'dpo_email', message: 'E-mail do Encarregado é obrigatório' })
     }
-    if (!getInputValue(d, 'operator_name').trim()) {
+    if (missing('operator_name')) {
       errors.push({ tab: 'identificacao', field: 'operator_name', message: '2.3 Operador (Razão Social / Nome) é obrigatório' })
     }
 
@@ -128,36 +181,36 @@ export const InventoryFormView: React.FC<InventoryFormViewProps> = ({
     if (!lifecycle.length) {
       errors.push({ tab: 'dados', field: 'lifecycle', message: '3. Fases do Ciclo de Vida: selecione ao menos uma etapa' })
     }
-    if (!getInputValue(d, 'flow').trim()) {
+    if (missing('flow')) {
       errors.push({ tab: 'dados', field: 'flow', message: '4.1 Descrição do fluxo de tratamento é obrigatória' })
     }
-    if (!getInputValue(d, 'geography').trim()) {
+    if (missing('geography')) {
       errors.push({ tab: 'dados', field: 'geography', message: '5.1 Abrangência geográfica é obrigatória' })
     }
-    if (!getInputValue(d, 'data_source').trim()) {
+    if (missing('data_source')) {
       errors.push({ tab: 'dados', field: 'data_source', message: '5.2 Fonte de coleta dos dados é obrigatória' })
     }
-    if (!getInputValue(d, 'legal_basis').trim()) {
+    if (missing('legal_basis')) {
       errors.push({ tab: 'dados', field: 'legal_basis', message: '6.1 Hipótese legal (Base Legal) é obrigatória' })
     }
-    if (!getInputValue(d, 'purpose').trim()) {
+    if (missing('purpose')) {
       errors.push({ tab: 'dados', field: 'purpose', message: '6.2 Finalidade específica do tratamento é obrigatória' })
     }
     const categories = (d.data_categories as string[]) || []
     if (!categories.length) {
       errors.push({ tab: 'dados', field: 'data_categories', message: '7. Categorias de Dados: selecione ao menos uma categoria' })
     }
-    if (!getInputValue(d, 'retention_period').trim()) {
+    if (missing('retention_period')) {
       errors.push({ tab: 'dados', field: 'retention_period', message: '7. Tempo / Prazo de retenção é obrigatório' })
     }
 
     // Tab 3
-    if (!getInputValue(d, 'data_subjects').trim()) {
+    if (missing('data_subjects')) {
       errors.push({ tab: 'titulares', field: 'data_subjects', message: '10.1 Descrição dos grupos de titulares é obrigatória' })
     }
 
     // Tab 4
-    if (!getInputValue(d, 'security').trim() || getInputValue(d, 'security').trim().length < 15) {
+    if (!na.includes('security') && getInputValue(d, 'security').trim().length < 15) {
       errors.push({ tab: 'seguranca', field: 'security', message: '12.1 Medidas de segurança devem ser detalhadas (mín. 15 caracteres)' })
     }
 
@@ -179,6 +232,7 @@ export const InventoryFormView: React.FC<InventoryFormViewProps> = ({
     }
 
     setSaving(true)
+    setSaveError('')
     try {
       const nextStatus = status || item.status || 'rascunho'
       await onSave({
@@ -189,6 +243,8 @@ export const InventoryFormView: React.FC<InventoryFormViewProps> = ({
       if (nextStatus === 'concluido') {
         onBack()
       }
+    } catch (err) {
+      setSaveError(err instanceof Error ? err.message : 'Não foi possível salvar o inventário.')
     } finally {
       setSaving(false)
     }
@@ -215,11 +271,7 @@ export const InventoryFormView: React.FC<InventoryFormViewProps> = ({
     return Boolean(subjects || vulnerable.length > 0)
   }, [item.form_data])
 
-  const isManager =
-    user?.role === 'admin' ||
-    user?.role === 'master' ||
-    user?.role === 'encarregado' ||
-    user?.email?.toLowerCase() === 'catzzrule65@gmail.com'
+  const isManager = isManagerRole(user?.role)
 
   return (
     <div className="form-page-layout">
@@ -273,7 +325,7 @@ export const InventoryFormView: React.FC<InventoryFormViewProps> = ({
               {item.title ? item.title : 'Novo Inventário de Processo'}
             </h1>
             <p className="form-page-subtitle">
-              Preencha todos os campos obrigatórios (*) para validar e concluir o relatório de mapeamento de dados.
+              Preencha os campos obrigatórios (*) ou marque "Não se aplica" quando o campo não fizer sentido para este processo.
             </p>
           </div>
           <div className="flex-center-gap">
@@ -291,7 +343,7 @@ export const InventoryFormView: React.FC<InventoryFormViewProps> = ({
               <strong>Não é possível enviar: Existem {validationErrors.length} campos obrigatórios pendentes</strong>
             </div>
             <p className="alert-desc">
-              Todos os campos obrigatórios marcados com asterisco (*) devem ser preenchidos para enviar o relatório.
+              Cada campo obrigatório (*) precisa ser preenchido ou marcado como "Não se aplica" para enviar o relatório.
             </p>
             <ul className="validation-error-list">
               {validationErrors.slice(0, 5).map((err, idx) => (
@@ -309,6 +361,16 @@ export const InventoryFormView: React.FC<InventoryFormViewProps> = ({
                 <li className="text-muted">... e mais {validationErrors.length - 5} campo(s).</li>
               )}
             </ul>
+          </div>
+        )}
+
+        {saveError && (
+          <div className="validation-alert-banner" role="alert">
+            <div className="alert-header">
+              <AlertTriangle size={20} className="alert-icon-warning" />
+              <strong>Não foi possível salvar</strong>
+            </div>
+            <p className="alert-desc">{saveError}</p>
           </div>
         )}
 
@@ -374,21 +436,25 @@ export const InventoryFormView: React.FC<InventoryFormViewProps> = ({
                     <div className="title-icon-badge"><Building size={18} /></div>
                     <div>
                       <h2>1 — Identificação do Serviço ou Processo de Negócio</h2>
-                      <span className="section-badge-required">Todos os campos desta seção são obrigatórios *</span>
+                      <span className="section-badge-required">Campos obrigatórios * — preencha ou marque "Não se aplica"</span>
                     </div>
                   </div>
 
                   <div className="form-grid-2">
                     <div className={`form-field full-width ${isFieldInvalid('system_name') ? 'field-error' : ''}`}>
-                      <label htmlFor="system_name" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        1.1 — Nome do sistema / Plataforma *
-                        <span title="Nome pelo qual o sistema é conhecido na unidade que o administra."><Info size={14} className="text-muted cursor-help" /></span>
-                      </label>
+                      <div className="field-label-row">
+                        <label htmlFor="system_name" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          1.1 — Nome do sistema / Plataforma *
+                          <span title="Nome pelo qual o sistema é conhecido na unidade que o administra."><Info size={14} className="text-muted cursor-help" /></span>
+                        </label>
+                        {naToggle('system_name')}
+                      </div>
                       <input
                         id="system_name"
+                        disabled={isNA('system_name')}
                         type="text"
-                        required
-                        value={getInputValue(item.form_data, 'system_name')}
+                        required={!isNA('system_name')}
+                        value={textValue('system_name')}
                         onChange={e => updateField('system_name', e.target.value)}
                         placeholder="Ex.: CitSmart, TouchIP, Sistema RH, CRM ou Servidor Local"
                       />
@@ -451,14 +517,18 @@ export const InventoryFormView: React.FC<InventoryFormViewProps> = ({
                     </div>
 
                     <div className={`form-field ${isFieldInvalid('system_start_date') ? 'field-error' : ''}`}>
-                      <label htmlFor="system_start_date" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        1.1d — Data de início do funcionamento
-                        <span title="Data da entrada em operação do sistema."><Info size={14} className="text-muted cursor-help" /></span>
-                      </label>
+                      <div className="field-label-row">
+                        <label htmlFor="system_start_date" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          1.1d — Data de início do funcionamento
+                          <span title="Data da entrada em operação do sistema."><Info size={14} className="text-muted cursor-help" /></span>
+                        </label>
+                        {naToggle('system_start_date')}
+                      </div>
                       <input
                         id="system_start_date"
-                        type="date"
-                        value={getInputValue(item.form_data, 'system_start_date')}
+                        disabled={isNA('system_start_date')}
+                        type={isNA('system_start_date') ? 'text' : 'date'}
+                        value={textValue('system_start_date')}
                         onChange={e => updateField('system_start_date', e.target.value)}
                       />
                     </div>
@@ -479,12 +549,16 @@ export const InventoryFormView: React.FC<InventoryFormViewProps> = ({
                     </div>
 
                     <div className={`form-field ${isFieldInvalid('reference_id') ? 'field-error' : ''}`}>
-                      <label htmlFor="reference_id">1.3 — Nº de Referência / Código ID *</label>
+                      <div className="field-label-row">
+                        <label htmlFor="reference_id">1.3 — Nº de Referência / Código ID *</label>
+                        {naToggle('reference_id')}
+                      </div>
                       <input
                         id="reference_id"
+                        disabled={isNA('reference_id')}
                         type="text"
-                        required
-                        value={item.reference_id}
+                        required={!isNA('reference_id')}
+                        value={isNA('reference_id') ? NOT_APPLICABLE_LABEL : item.reference_id}
                         onChange={e => updateField('reference_id', e.target.value)}
                         placeholder="Ex.: PROC-2026-084"
                       />
@@ -529,18 +603,22 @@ export const InventoryFormView: React.FC<InventoryFormViewProps> = ({
                     <div className="title-icon-badge"><UserCheck size={18} /></div>
                     <div>
                       <h2>2 — Agentes de Tratamento e Encarregado (DPO)</h2>
-                      <span className="section-badge-required">Todos os campos desta seção são obrigatórios *</span>
+                      <span className="section-badge-required">Campos obrigatórios * — preencha ou marque "Não se aplica"</span>
                     </div>
                   </div>
 
                   <div className="form-grid-3">
                     <div className={`form-field ${isFieldInvalid('controller_name') ? 'field-error' : ''}`}>
-                      <label htmlFor="controller_name">2.1 — Controlador (Nome / Órgão) *</label>
+                      <div className="field-label-row">
+                        <label htmlFor="controller_name">2.1 — Controlador (Nome / Órgão) *</label>
+                        {naToggle('controller_name')}
+                      </div>
                       <input
                         id="controller_name"
+                        disabled={isNA('controller_name')}
                         type="text"
-                        required
-                        value={getInputValue(item.form_data, 'controller_name')}
+                        required={!isNA('controller_name')}
+                        value={textValue('controller_name')}
                         onChange={e => updateField('controller_name', e.target.value)}
                         placeholder="Ex.: Ministério / Empresa X"
                       />
@@ -548,12 +626,16 @@ export const InventoryFormView: React.FC<InventoryFormViewProps> = ({
                     </div>
 
                     <div className={`form-field ${isFieldInvalid('controller_email') ? 'field-error' : ''}`}>
-                      <label htmlFor="controller_email">E-mail do Controlador *</label>
+                      <div className="field-label-row">
+                        <label htmlFor="controller_email">E-mail do Controlador *</label>
+                        {naToggle('controller_email')}
+                      </div>
                       <input
                         id="controller_email"
+                        disabled={isNA('controller_email')}
                         type="email"
-                        required
-                        value={getInputValue(item.form_data, 'controller_email')}
+                        required={!isNA('controller_email')}
+                        value={textValue('controller_email')}
                         onChange={e => updateField('controller_email', e.target.value)}
                         placeholder="controlador@orgao.gov.br"
                       />
@@ -561,12 +643,16 @@ export const InventoryFormView: React.FC<InventoryFormViewProps> = ({
                     </div>
 
                     <div className={`form-field ${isFieldInvalid('controller_phone') ? 'field-error' : ''}`}>
-                      <label htmlFor="controller_phone">Telefone do Controlador *</label>
+                      <div className="field-label-row">
+                        <label htmlFor="controller_phone">Telefone do Controlador *</label>
+                        {naToggle('controller_phone')}
+                      </div>
                       <input
                         id="controller_phone"
+                        disabled={isNA('controller_phone')}
                         type="text"
-                        required
-                        value={getInputValue(item.form_data, 'controller_phone')}
+                        required={!isNA('controller_phone')}
+                        value={textValue('controller_phone')}
                         onChange={e => updateField('controller_phone', e.target.value)}
                         placeholder="(61) 99999-0000"
                       />
@@ -576,12 +662,16 @@ export const InventoryFormView: React.FC<InventoryFormViewProps> = ({
 
                   <div className="form-grid-3 margin-top">
                     <div className={`form-field ${isFieldInvalid('dpo_name') ? 'field-error' : ''}`}>
-                      <label htmlFor="dpo_name">2.2 — Encarregado (DPO - Nome) *</label>
+                      <div className="field-label-row">
+                        <label htmlFor="dpo_name">2.2 — Encarregado (DPO - Nome) *</label>
+                        {naToggle('dpo_name')}
+                      </div>
                       <input
                         id="dpo_name"
+                        disabled={isNA('dpo_name')}
                         type="text"
-                        required
-                        value={getInputValue(item.form_data, 'dpo_name')}
+                        required={!isNA('dpo_name')}
+                        value={textValue('dpo_name')}
                         onChange={e => updateField('dpo_name', e.target.value)}
                         placeholder="Nome do Encarregado de Dados"
                       />
@@ -589,12 +679,16 @@ export const InventoryFormView: React.FC<InventoryFormViewProps> = ({
                     </div>
 
                     <div className={`form-field ${isFieldInvalid('dpo_email') ? 'field-error' : ''}`}>
-                      <label htmlFor="dpo_email">E-mail do Encarregado *</label>
+                      <div className="field-label-row">
+                        <label htmlFor="dpo_email">E-mail do Encarregado *</label>
+                        {naToggle('dpo_email')}
+                      </div>
                       <input
                         id="dpo_email"
+                        disabled={isNA('dpo_email')}
                         type="email"
-                        required
-                        value={getInputValue(item.form_data, 'dpo_email')}
+                        required={!isNA('dpo_email')}
+                        value={textValue('dpo_email')}
                         onChange={e => updateField('dpo_email', e.target.value)}
                         placeholder="dpo@orgao.gov.br"
                       />
@@ -602,12 +696,16 @@ export const InventoryFormView: React.FC<InventoryFormViewProps> = ({
                     </div>
 
                     <div className={`form-field ${isFieldInvalid('operator_name') ? 'field-error' : ''}`}>
-                      <label htmlFor="operator_name">2.3 — Operador (Razão Social / Nome) *</label>
+                      <div className="field-label-row">
+                        <label htmlFor="operator_name">2.3 — Operador (Razão Social / Nome) *</label>
+                        {naToggle('operator_name')}
+                      </div>
                       <input
                         id="operator_name"
+                        disabled={isNA('operator_name')}
                         type="text"
-                        required
-                        value={getInputValue(item.form_data, 'operator_name')}
+                        required={!isNA('operator_name')}
+                        value={textValue('operator_name')}
                         onChange={e => updateField('operator_name', e.target.value)}
                         placeholder="Ex.: Empresa prestadora de TI contratada"
                       />
@@ -646,11 +744,15 @@ export const InventoryFormView: React.FC<InventoryFormViewProps> = ({
                   {isFieldInvalid('lifecycle') && <span className="error-hint">Selecione ao menos uma fase</span>}
 
                   <div className="form-field full-width margin-top">
-                    <label htmlFor="lifecycle_description">3.1 — Em qual fase do ciclo de vida o Operador atua</label>
+                    <div className="field-label-row">
+                      <label htmlFor="lifecycle_description">3.1 — Em qual fase do ciclo de vida o Operador atua</label>
+                      {naToggle('lifecycle_description')}
+                    </div>
                     <textarea
                       id="lifecycle_description"
+                      disabled={isNA('lifecycle_description')}
                       rows={2}
-                      value={getInputValue(item.form_data, 'lifecycle_description')}
+                      value={textValue('lifecycle_description')}
                       onChange={e => updateField('lifecycle_description', e.target.value)}
                       placeholder="Ex.: O Operador atua na fase de Processamento, executando o cálculo do benefício a partir dos dados coletados pela área de RH."
                     />
@@ -663,12 +765,16 @@ export const InventoryFormView: React.FC<InventoryFormViewProps> = ({
                     <h2>4 — Descrição do Fluxo e Forma de Tratamento *</h2>
                   </div>
                   <div className={`form-field full-width ${isFieldInvalid('flow') ? 'field-error' : ''}`}>
-                    <label htmlFor="flow">4.1 — Descrição do fluxo de tratamento de dados pessoais *</label>
+                    <div className="field-label-row">
+                      <label htmlFor="flow">4.1 — Descrição do fluxo de tratamento de dados pessoais *</label>
+                      {naToggle('flow')}
+                    </div>
                     <textarea
                       id="flow"
+                      disabled={isNA('flow')}
                       rows={3}
-                      required
-                      value={getInputValue(item.form_data, 'flow')}
+                      required={!isNA('flow')}
+                      value={textValue('flow')}
                       onChange={e => updateField('flow', e.target.value)}
                       placeholder="Detalhamento desde a entrada/recebimento do dado, locais de armazenamento, sistemas envolvidos até o descarte seguro."
                     />
@@ -683,24 +789,32 @@ export const InventoryFormView: React.FC<InventoryFormViewProps> = ({
                   </div>
                   <div className="form-grid-2">
                     <div className={`form-field ${isFieldInvalid('geography') ? 'field-error' : ''}`}>
-                      <label htmlFor="geography">5.1 — Abrangência geográfica do tratamento *</label>
+                      <div className="field-label-row">
+                        <label htmlFor="geography">5.1 — Abrangência geográfica do tratamento *</label>
+                        {naToggle('geography')}
+                      </div>
                       <input
                         id="geography"
+                        disabled={isNA('geography')}
                         type="text"
-                        required
-                        value={getInputValue(item.form_data, 'geography')}
+                        required={!isNA('geography')}
+                        value={textValue('geography')}
                         onChange={e => updateField('geography', e.target.value)}
                         placeholder="Ex.: Nacional, Estadual ou Municipal"
                       />
                       {isFieldInvalid('geography') && <span className="error-hint">Campo obrigatório</span>}
                     </div>
                     <div className={`form-field ${isFieldInvalid('data_source') ? 'field-error' : ''}`}>
-                      <label htmlFor="data_source">5.2 — Fonte de coleta dos dados *</label>
+                      <div className="field-label-row">
+                        <label htmlFor="data_source">5.2 — Fonte de coleta dos dados *</label>
+                        {naToggle('data_source')}
+                      </div>
                       <input
                         id="data_source"
+                        disabled={isNA('data_source')}
                         type="text"
-                        required
-                        value={getInputValue(item.form_data, 'data_source')}
+                        required={!isNA('data_source')}
+                        value={textValue('data_source')}
                         onChange={e => updateField('data_source', e.target.value)}
                         placeholder="Ex.: Coleta direta pelo formulário web, API externa..."
                       />
@@ -716,55 +830,75 @@ export const InventoryFormView: React.FC<InventoryFormViewProps> = ({
                   </div>
                   <div className="form-grid-2">
                     <div className={`form-field full-width ${isFieldInvalid('legal_basis') ? 'field-error' : ''}`}>
-                      <label htmlFor="legal_basis">6.1 — Hipótese legal de tratamento (Base Legal) *</label>
+                      <div className="field-label-row">
+                        <label htmlFor="legal_basis">6.1 — Hipótese legal de tratamento (Base Legal) *</label>
+                        {naToggle('legal_basis')}
+                      </div>
                       <input
                         id="legal_basis"
+                        disabled={isNA('legal_basis')}
                         type="text"
-                        required
-                        value={getInputValue(item.form_data, 'legal_basis')}
+                        required={!isNA('legal_basis')}
+                        value={textValue('legal_basis')}
                         onChange={e => updateField('legal_basis', e.target.value)}
                         placeholder="Ex.: Cumprimento de obrigação legal (Art. 7º, II) ou Execução de políticas públicas (Art. 7º, III)"
                       />
                       {isFieldInvalid('legal_basis') && <span className="error-hint">Campo obrigatório</span>}
                     </div>
                     <div className={`form-field full-width ${isFieldInvalid('purpose') ? 'field-error' : ''}`}>
-                      <label htmlFor="purpose">6.2 — Finalidade específica do tratamento *</label>
+                      <div className="field-label-row">
+                        <label htmlFor="purpose">6.2 — Finalidade específica do tratamento *</label>
+                        {naToggle('purpose')}
+                      </div>
                       <textarea
                         id="purpose"
+                        disabled={isNA('purpose')}
                         rows={2}
-                        required
-                        value={getInputValue(item.form_data, 'purpose')}
+                        required={!isNA('purpose')}
+                        value={textValue('purpose')}
                         onChange={e => updateField('purpose', e.target.value)}
                         placeholder="Descreva a razão de ser da coleta desse dado pessoal para o processo..."
                       />
                       {isFieldInvalid('purpose') && <span className="error-hint">Campo obrigatório</span>}
                     </div>
                     <div className="form-field full-width">
-                      <label htmlFor="legal_provision">6.3 — Previsão legal</label>
+                      <div className="field-label-row">
+                        <label htmlFor="legal_provision">6.3 — Previsão legal</label>
+                        {naToggle('legal_provision')}
+                      </div>
                       <textarea
                         id="legal_provision"
+                        disabled={isNA('legal_provision')}
                         rows={2}
-                        value={getInputValue(item.form_data, 'legal_provision')}
+                        value={textValue('legal_provision')}
                         onChange={e => updateField('legal_provision', e.target.value)}
                         placeholder="Ex.: Lei nº 8.112/1990, Decreto nº 9.991/2019, art. 15 da Portaria XX/2020..."
                       />
                     </div>
                     <div className="form-field full-width">
-                      <label htmlFor="expected_results">6.4 — Resultados pretendidos para o titular de dados</label>
+                      <div className="field-label-row">
+                        <label htmlFor="expected_results">6.4 — Resultados pretendidos para o titular de dados</label>
+                        {naToggle('expected_results')}
+                      </div>
                       <textarea
                         id="expected_results"
+                        disabled={isNA('expected_results')}
                         rows={2}
-                        value={getInputValue(item.form_data, 'expected_results')}
+                        value={textValue('expected_results')}
                         onChange={e => updateField('expected_results', e.target.value)}
                         placeholder="Ex.: Recebimento do benefício, emissão do documento, acesso ao serviço solicitado..."
                       />
                     </div>
                     <div className="form-field full-width">
-                      <label htmlFor="expected_benefits">6.5 — Benefícios esperados para o órgão, entidade ou sociedade</label>
+                      <div className="field-label-row">
+                        <label htmlFor="expected_benefits">6.5 — Benefícios esperados para o órgão, entidade ou sociedade</label>
+                        {naToggle('expected_benefits')}
+                      </div>
                       <textarea
                         id="expected_benefits"
+                        disabled={isNA('expected_benefits')}
                         rows={2}
-                        value={getInputValue(item.form_data, 'expected_benefits')}
+                        value={textValue('expected_benefits')}
                         onChange={e => updateField('expected_benefits', e.target.value)}
                         placeholder="Ex.: Melhoria na gestão do programa, redução de fraudes, cumprimento de política pública..."
                       />
@@ -798,11 +932,15 @@ export const InventoryFormView: React.FC<InventoryFormViewProps> = ({
                   {isFieldInvalid('data_categories') && <span className="error-hint">Selecione ao menos uma categoria</span>}
 
                   <div className="form-field full-width margin-top">
-                    <label htmlFor="data_categories_description">Descrição dos dados coletados nessas categorias</label>
+                    <div className="field-label-row">
+                      <label htmlFor="data_categories_description">Descrição dos dados coletados nessas categorias</label>
+                      {naToggle('data_categories_description')}
+                    </div>
                     <textarea
                       id="data_categories_description"
+                      disabled={isNA('data_categories_description')}
                       rows={2}
-                      value={getInputValue(item.form_data, 'data_categories_description')}
+                      value={textValue('data_categories_description')}
                       onChange={e => updateField('data_categories_description', e.target.value)}
                       placeholder="Ex.: Nome completo, CPF, data de nascimento e endereço residencial dos servidores ativos."
                     />
@@ -810,23 +948,31 @@ export const InventoryFormView: React.FC<InventoryFormViewProps> = ({
 
                   <div className="form-grid-2 margin-top">
                     <div className={`form-field ${isFieldInvalid('retention_period') ? 'field-error' : ''}`}>
-                      <label htmlFor="retention_period">Tempo / Prazo de retenção dos dados *</label>
+                      <div className="field-label-row">
+                        <label htmlFor="retention_period">Tempo / Prazo de retenção dos dados *</label>
+                        {naToggle('retention_period')}
+                      </div>
                       <input
                         id="retention_period"
+                        disabled={isNA('retention_period')}
                         type="text"
-                        required
-                        value={getInputValue(item.form_data, 'retention_period')}
+                        required={!isNA('retention_period')}
+                        value={textValue('retention_period')}
                         onChange={e => updateField('retention_period', e.target.value)}
                         placeholder="Ex.: 5 anos após o término do vínculo contrato"
                       />
                       {isFieldInvalid('retention_period') && <span className="error-hint">Campo obrigatório</span>}
                     </div>
                     <div className="form-field">
-                      <label htmlFor="database">Nome do Banco de Dados / Tabela</label>
+                      <div className="field-label-row">
+                        <label htmlFor="database">Nome do Banco de Dados / Tabela</label>
+                        {naToggle('database')}
+                      </div>
                       <input
                         id="database"
+                        disabled={isNA('database')}
                         type="text"
-                        value={getInputValue(item.form_data, 'database')}
+                        value={textValue('database')}
                         onChange={e => updateField('database', e.target.value)}
                         placeholder="Ex.: db_servidores.tb_cadastro"
                       />
@@ -857,11 +1003,15 @@ export const InventoryFormView: React.FC<InventoryFormViewProps> = ({
                     })}
                   </div>
                   <div className="form-field full-width margin-top">
-                    <label htmlFor="sensitive_categories_description">Descrição dos dados sensíveis coletados</label>
+                    <div className="field-label-row">
+                      <label htmlFor="sensitive_categories_description">Descrição dos dados sensíveis coletados</label>
+                      {naToggle('sensitive_categories_description')}
+                    </div>
                     <textarea
                       id="sensitive_categories_description"
+                      disabled={isNA('sensitive_categories_description')}
                       rows={2}
-                      value={getInputValue(item.form_data, 'sensitive_categories_description')}
+                      value={textValue('sensitive_categories_description')}
                       onChange={e => updateField('sensitive_categories_description', e.target.value)}
                       placeholder="Ex.: Laudo médico de aptidão física, exigido apenas para o cargo de agente de segurança."
                     />
@@ -875,21 +1025,29 @@ export const InventoryFormView: React.FC<InventoryFormViewProps> = ({
                   </div>
                   <div className="form-grid-2">
                     <div className="form-field">
-                      <label htmlFor="frequency">9.1 — Frequência do tratamento</label>
+                      <div className="field-label-row">
+                        <label htmlFor="frequency">9.1 — Frequência do tratamento</label>
+                        {naToggle('frequency')}
+                      </div>
                       <input
                         id="frequency"
+                        disabled={isNA('frequency')}
                         type="text"
-                        value={getInputValue(item.form_data, 'frequency')}
+                        value={textValue('frequency')}
                         onChange={e => updateField('frequency', e.target.value)}
                         placeholder="Ex.: Contínua, Mensal, Anual, Sob demanda"
                       />
                     </div>
                     <div className="form-field">
-                      <label htmlFor="data_volume">9.2 — Quantidade aproximada de titulares</label>
+                      <div className="field-label-row">
+                        <label htmlFor="data_volume">9.2 — Quantidade aproximada de titulares</label>
+                        {naToggle('data_volume')}
+                      </div>
                       <input
                         id="data_volume"
+                        disabled={isNA('data_volume')}
                         type="text"
-                        value={getInputValue(item.form_data, 'data_volume')}
+                        value={textValue('data_volume')}
                         onChange={e => updateField('data_volume', e.target.value)}
                         placeholder="Ex.: ~5.000 usuários ativos"
                       />
@@ -925,12 +1083,16 @@ export const InventoryFormView: React.FC<InventoryFormViewProps> = ({
                   )}
 
                   <div className={`form-field full-width ${isFieldInvalid('data_subjects') ? 'field-error' : ''}`}>
-                    <label htmlFor="data_subjects">10.1 — Descrição dos grupos de titulares *</label>
+                    <div className="field-label-row">
+                      <label htmlFor="data_subjects">10.1 — Descrição dos grupos de titulares *</label>
+                      {naToggle('data_subjects')}
+                    </div>
                     <textarea
                       id="data_subjects"
+                      disabled={isNA('data_subjects')}
                       rows={3}
-                      required
-                      value={getInputValue(item.form_data, 'data_subjects')}
+                      required={!isNA('data_subjects')}
+                      value={textValue('data_subjects')}
                       onChange={e => updateField('data_subjects', e.target.value)}
                       placeholder="Ex.: Servidores públicos ativos, inativos, pensionistas, cidadãos solicitantes e dependentes declarados."
                     />
@@ -959,14 +1121,19 @@ export const InventoryFormView: React.FC<InventoryFormViewProps> = ({
                 </div>
 
                 <div className="section-block">
-                  <div className="section-title">
+                  <div className="section-title section-title-with-na">
                     <div className="title-icon-badge"><Building size={18} /></div>
                     <h2>11 — Compartilhamento de Dados Pessoais</h2>
+                    {naToggle('sharing', [])}
                   </div>
-                  <SharingTable
-                    sharing={(item.form_data.sharing as TableRow[]) || []}
-                    onChange={newList => updateField('sharing', newList)}
-                  />
+                  {isNA('sharing') ? (
+                    <p className="na-section-note">{NOT_APPLICABLE_LABEL} — não há compartilhamento de dados pessoais neste processo.</p>
+                  ) : (
+                    <SharingTable
+                      sharing={(item.form_data.sharing as TableRow[]) || []}
+                      onChange={newList => updateField('sharing', newList)}
+                    />
+                  )}
                 </div>
               </div>
             )}
@@ -980,22 +1147,30 @@ export const InventoryFormView: React.FC<InventoryFormViewProps> = ({
                     <h2>12 — Medidas de Segurança, Técnicas e Administrativas *</h2>
                   </div>
                   <div className="form-field full-width">
-                    <label htmlFor="security_type">Tipo de medida de segurança e privacidade</label>
+                    <div className="field-label-row">
+                      <label htmlFor="security_type">Tipo de medida de segurança e privacidade</label>
+                      {naToggle('security_type')}
+                    </div>
                     <input
                       id="security_type"
+                      disabled={isNA('security_type')}
                       type="text"
-                      value={getInputValue(item.form_data, 'security_type')}
+                      value={textValue('security_type')}
                       onChange={e => updateField('security_type', e.target.value)}
                       placeholder="Ex.: Controle de acesso, criptografia, backup, auditoria de logs"
                     />
                   </div>
                   <div className={`form-field full-width margin-top-xs ${isFieldInvalid('security') ? 'field-error' : ''}`}>
-                    <label htmlFor="security">12.1 — Descrição do(s) controle(s) de segurança aplicado(s) *</label>
+                    <div className="field-label-row">
+                      <label htmlFor="security">12.1 — Descrição do(s) controle(s) de segurança aplicado(s) *</label>
+                      {naToggle('security')}
+                    </div>
                     <textarea
                       id="security"
+                      disabled={isNA('security')}
                       rows={4}
-                      required
-                      value={getInputValue(item.form_data, 'security')}
+                      required={!isNA('security')}
+                      value={textValue('security')}
                       onChange={e => updateField('security', e.target.value)}
                       placeholder="Ex.: Autenticação multifator (MFA), perfis de acesso restritos por papel, criptografia SSL/TLS em trânsito e repositório, política de backup diário e logs de auditoria imutáveis."
                     />
@@ -1006,10 +1181,14 @@ export const InventoryFormView: React.FC<InventoryFormViewProps> = ({
                 </div>
 
                 <div className="section-block">
-                  <div className="section-title">
+                  <div className="section-title section-title-with-na">
                     <div className="title-icon-badge"><Globe size={18} /></div>
                     <h2>13 — Transferência Internacional de Dados Pessoais</h2>
+                    {naToggle('international_transfers', [])}
                   </div>
+                  {isNA('international_transfers') ? (
+                    <p className="na-section-note">{NOT_APPLICABLE_LABEL} — não há transferência internacional de dados.</p>
+                  ) : (
                   <TransferTable
                     transfers={
                       (item.form_data.international_transfers as TransferRow[]) ||
@@ -1019,13 +1198,18 @@ export const InventoryFormView: React.FC<InventoryFormViewProps> = ({
                     }
                     onChange={newList => updateField('international_transfers', newList)}
                   />
+                  )}
                 </div>
 
                 <div className="section-block">
-                  <div className="section-title">
+                  <div className="section-title section-title-with-na">
                     <div className="title-icon-badge"><FileCode size={18} /></div>
                     <h2>14 — Contratos de Serviços / Soluções de TI Envolvidos</h2>
+                    {naToggle('contracts_list', [])}
                   </div>
+                  {isNA('contracts_list') ? (
+                    <p className="na-section-note">{NOT_APPLICABLE_LABEL} — não há contratos de TI envolvidos.</p>
+                  ) : (
                   <ContractsTable
                     contracts={
                       (item.form_data.contracts_list as ContractRow[]) ||
@@ -1035,6 +1219,7 @@ export const InventoryFormView: React.FC<InventoryFormViewProps> = ({
                     }
                     onChange={newList => updateField('contracts_list', newList)}
                   />
+                  )}
                 </div>
 
                 {/* Direct Risk Report Inside Security Tab (Only for Gestores) */}

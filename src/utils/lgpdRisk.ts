@@ -31,6 +31,27 @@ export const getInputValue = (data: FormData, key: string): string => {
   return String(val || '')
 }
 
+export const NOT_APPLICABLE_LABEL = 'Não se aplica'
+
+export const getNotApplicable = (data: FormData): string[] =>
+  Array.isArray(data.not_applicable) ? (data.not_applicable as string[]) : []
+
+export const isNotApplicable = (data: FormData, key: string): boolean => getNotApplicable(data).includes(key)
+
+// Para exibição (relatórios, CSV, tabelas): distingue "Não se aplica" de
+// campo vazio. Não use nos inputs do formulário — lá o valor real é vazio.
+export const displayValue = (data: FormData, key: string, emptyLabel = ''): string => {
+  if (isNotApplicable(data, key)) return NOT_APPLICABLE_LABEL
+  return getInputValue(data, key) || emptyLabel
+}
+
+const hasTransfers = (data: FormData): boolean => {
+  if (isNotApplicable(data, 'international_transfers')) return false
+  const rows = (data.international_transfers as { country?: string; data?: string; guarantee?: string }[]) || []
+  if (rows.some(r => (r.country || r.data || r.guarantee || '').trim())) return true
+  return Boolean(getInputValue(data, 'international_transfer').trim())
+}
+
 export function riskReport(data: FormData): RiskItem[] {
   const risks: RiskItem[] = []
   const sensitiveData = (data.sensitive_categories as string[]) || []
@@ -44,35 +65,50 @@ export function riskReport(data: FormData): RiskItem[] {
     })
   }
 
-  if (getInputValue(data, 'international_transfer')) {
+  if (hasTransfers(data)) {
     risks.push({
       level: 'alto',
       text: 'Há transferência internacional declarada. Documente o país de destino, garantias exigidas e base legal aplicável (Art. 33).'
     })
   }
 
-  if (lifecycle.includes('Compartilhamento') && !sharingList.length) {
+  if (lifecycle.includes('Compartilhamento') && !sharingList.length && !isNotApplicable(data, 'sharing')) {
     risks.push({
       level: 'medio',
       text: 'Compartilhamento marcado no ciclo de vida, mas sem destinatários, dados e finalidades registrados.'
     })
   }
 
-  if (!getInputValue(data, 'retention_period')) {
+  if (isNotApplicable(data, 'retention_period')) {
+    risks.push({
+      level: 'medio',
+      text: 'O prazo de retenção foi marcado como "Não se aplica". Confirme com o Encarregado como os dados serão eliminados.'
+    })
+  } else if (!getInputValue(data, 'retention_period')) {
     risks.push({
       level: 'medio',
       text: 'O prazo de retenção e hipótese de eliminação ainda não foram definidos.'
     })
   }
 
-  if (!getInputValue(data, 'legal_basis')) {
+  if (isNotApplicable(data, 'legal_basis')) {
+    risks.push({
+      level: 'medio',
+      text: 'A hipótese legal foi marcada como "Não se aplica". Todo tratamento de dados pessoais precisa de base legal (Art. 7º ou 11) — revise.'
+    })
+  } else if (!getInputValue(data, 'legal_basis')) {
     risks.push({
       level: 'medio',
       text: 'A hipótese legal de tratamento (Art. 7º ou 11) é obrigatória para a conformidade.'
     })
   }
 
-  if (!getInputValue(data, 'security') || getInputValue(data, 'security').length < 20) {
+  if (isNotApplicable(data, 'security')) {
+    risks.push({
+      level: 'medio',
+      text: 'As medidas de segurança foram marcadas como "Não se aplica". Confirme com o Encarregado (Art. 46).'
+    })
+  } else if (!getInputValue(data, 'security') || getInputValue(data, 'security').length < 20) {
     risks.push({
       level: 'medio',
       text: 'Descreva detalhadamente as medidas técnicas e administrativas de segurança (Art. 46).'

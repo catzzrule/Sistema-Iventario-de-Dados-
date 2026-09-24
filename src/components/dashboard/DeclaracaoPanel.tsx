@@ -175,7 +175,7 @@ export const DeclaracaoPanel: React.FC<DeclaracaoPanelProps> = ({
       {noUnit && (
         <div className="alert-box alert-error flex-center-gap margin-top-xs">
           <AlertTriangle size={16} />
-          <span>Você ainda não tem uma unidade definida. Vá em Configurações → Meu Perfil e informe sua unidade antes de cadastrar fontes de dados ou compartilhamentos.</span>
+          <span>Você ainda não tem uma unidade definida. Peça ao Master para vincular seu usuário a uma unidade antes de cadastrar fontes de dados ou compartilhamentos.</span>
         </div>
       )}
 
@@ -240,7 +240,7 @@ export const DeclaracaoPanel: React.FC<DeclaracaoPanelProps> = ({
             className="btn-secondary btn-sm"
             onClick={() => setSourceModalOpen(true)}
             disabled={noUnit}
-            title={noUnit ? 'Defina sua unidade antes' : undefined}
+            title={noUnit ? 'Peça ao Master para definir sua unidade' : undefined}
           >
             <Plus size={15} />
             <span>Nova fonte</span>
@@ -295,7 +295,7 @@ export const DeclaracaoPanel: React.FC<DeclaracaoPanelProps> = ({
             className="btn-secondary btn-sm"
             onClick={() => setSharingModalOpen(true)}
             disabled={noUnit}
-            title={noUnit ? 'Defina sua unidade antes' : undefined}
+            title={noUnit ? 'Peça ao Master para definir sua unidade' : undefined}
           >
             <Plus size={15} />
             <span>Novo compartilhamento</span>

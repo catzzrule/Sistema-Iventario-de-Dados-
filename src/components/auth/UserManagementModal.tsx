@@ -13,10 +13,12 @@ import {
   Info,
   ShieldCheck
 } from 'lucide-react'
-import { Role } from '../../types/inventory'
+import { Role, Unit } from '../../types/inventory'
+import { ROLE_DESCRIPTIONS, ROLE_LABELS } from '../../utils/roles'
 
 interface UserManagementModalProps {
   isOpen: boolean
+  units?: Unit[]
   onClose: () => void
   onCreateUser: (params: {
     email: string
@@ -29,13 +31,14 @@ interface UserManagementModalProps {
 
 export const UserManagementModal: React.FC<UserManagementModalProps> = ({
   isOpen,
+  units = [],
   onClose,
   onCreateUser
 }) => {
   const [email, setEmail] = useState('')
   const [fullName, setFullName] = useState('')
   const [unit, setUnit] = useState('')
-  const [role, setRole] = useState<Role>('user')
+  const [role, setRole] = useState<Role>('ponto_focal')
   const [customPassword, setCustomPassword] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
@@ -96,7 +99,7 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
     setEmail('')
     setFullName('')
     setUnit('')
-    setRole('user')
+    setRole('ponto_focal')
     setCustomPassword('')
     setCreatedData(null)
     setError('')
@@ -110,7 +113,7 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
             <UserPlus size={24} />
           </div>
           <div className="flex-1">
-            <h3>Gestão de Usuários e Acessos (TI)</h3>
+            <h3>Novo usuário</h3>
             <p>Cadastre novos usuários com envio de senha provisória e troca obrigatória no 1º acesso.</p>
           </div>
           <button type="button" onClick={onClose} className="btn-icon" aria-label="Fechar">
@@ -140,17 +143,13 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
               <div className="cred-row">
                 <span className="cred-label">Tipo de Perfil:</span>
                 <span className="cred-val">
-                  {createdData.role === 'admin'
-                    ? 'Gestor da Unidade'
-                    : createdData.role === 'encarregado'
-                    ? 'Encarregado (DPO)'
-                    : 'Usuário Comum (Preenchedor)'}
+                  {ROLE_LABELS[createdData.role]}
                 </span>
               </div>
               <div className="cred-row">
                 <span className="cred-label">Primeiro Acesso:</span>
                 <span className="cred-val text-warning font-bold">
-                  {createdData.role === 'user'
+                  {createdData.role === 'ponto_focal'
                     ? '⚠️ Obrigatório cadastrar nova senha definitiva no 1º login'
                     : 'Acesso direto sem troca obrigatória'}
                 </span>
@@ -218,10 +217,16 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
                   <input
                     id="user-unit"
                     type="text"
+                    list="user-units-list"
                     value={unit}
                     onChange={e => setUnit(e.target.value)}
                     placeholder="Ex.: Recursos Humanos / TI"
                   />
+                  <datalist id="user-units-list">
+                    {units.map(u => (
+                      <option key={u.id} value={u.name} />
+                    ))}
+                  </datalist>
                 </div>
               </div>
 
@@ -233,9 +238,11 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
                   onChange={e => setRole(e.target.value as Role)}
                   className="custom-select-large select-compact"
                 >
-                  <option value="user">👤 Ponto Focal / Usuário Comum (Preenchedor — Troca Obrigatória)</option>
-                  <option value="admin">🛡️ Gestor de Unidade (aprova a declaração da própria unidade)</option>
-                  <option value="encarregado">🏛️ Encarregado (DPO) — visão de toda a instituição</option>
+                  {(['ponto_focal', 'gestor', 'master'] as Role[]).map(r => (
+                    <option key={r} value={r}>
+                      {ROLE_LABELS[r]} — {ROLE_DESCRIPTIONS[r]}
+                    </option>
+                  ))}
                 </select>
               </div>
             </div>
@@ -267,9 +274,9 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
             <div className="info-notice-banner margin-top-xs">
               <Info size={15} className="notice-icon" />
               <span>
-                {role === 'user'
-                  ? '🔒 Como usuário comum, o sistema forçará a criação de uma nova senha pessoal no 1º acesso.'
-                  : '⚡ Perfis de Administrador têm acesso liberado direto sem troca obrigatória.'}
+                {role === 'ponto_focal'
+                  ? '🔒 O Ponto Focal deverá criar uma senha pessoal no 1º acesso.'
+                  : '⚡ Gestor e Master entram direto, sem troca obrigatória de senha.'}
               </span>
             </div>
 

@@ -7,10 +7,12 @@ import {
   ItemStatus,
   ManagedProfile,
   Sharing,
+  Unit,
   UnitDeclaration,
   UserProfile
 } from '../../types/inventory'
 import { riskReport } from '../../utils/lgpdRisk'
+import { isMasterRole } from '../../utils/roles'
 
 interface AprovacoesPanelProps {
   user: UserProfile
@@ -20,6 +22,7 @@ interface AprovacoesPanelProps {
   sharings: Sharing[]
   unitDeclarations: UnitDeclaration[]
   allUsers: ManagedProfile[]
+  units: Unit[]
   onApprove: (declaration: UnitDeclaration) => Promise<void>
   onReturn: (declaration: UnitDeclaration, observation: string) => Promise<void>
   onOpenInventory: (inventory: Inventory) => void
@@ -48,6 +51,7 @@ export const AprovacoesPanel: React.FC<AprovacoesPanelProps> = ({
   sharings,
   unitDeclarations,
   allUsers,
+  units,
   onApprove,
   onReturn,
   onOpenInventory
@@ -55,26 +59,61 @@ export const AprovacoesPanel: React.FC<AprovacoesPanelProps> = ({
   const [observation, setObservation] = useState('')
   const [busy, setBusy] = useState<'approve' | 'return' | null>(null)
 
-  const declaration = useMemo(
-    () => unitDeclarations.find(d => d.unit_id === user.unit_id && d.cycle_id === cycle?.id) || null,
-    [unitDeclarations, user.unit_id, cycle]
+  const [selectedId, setSelectedId] = useState<string | null>(null)
+
+  // O banco (RLS) já limita o que cada perfil enxerga; aqui só reforçamos o
+  // recorte: Gestor com unidade vê apenas a própria, Master vê todas.
+  const scopedDeclarations = useMemo(
+    () =>
+      unitDeclarations.filter(
+        d =>
+          d.cycle_id === cycle?.id &&
+          (isMasterRole(user.role) || !user.unit_id || d.unit_id === user.unit_id)
+      ),
+    [unitDeclarations, cycle, user.role, user.unit_id]
   )
+
+  const pendingDeclarations = useMemo(
+    () => scopedDeclarations.filter(d => d.submitted_at && d.status === 'em_preenchimento'),
+    [scopedDeclarations]
+  )
+
+  const unitName = (unitId?: string | null) => units.find(u => u.id === unitId)?.name || 'Unidade'
+
+  const declaration =
+    pendingDeclarations.find(d => d.id === selectedId) ||
+    pendingDeclarations[0] ||
+    scopedDeclarations.find(d => d.unit_id === user.unit_id) ||
+    null
 
   const isPending = Boolean(declaration && declaration.submitted_at && declaration.status === 'em_preenchimento')
 
+  const unitInventories = useMemo(
+    () => inventories.filter(i => declaration && i.unit_id === declaration.unit_id),
+    [inventories, declaration]
+  )
+  const unitDataSources = useMemo(
+    () => dataSources.filter(d => declaration && d.unit_id === declaration.unit_id),
+    [dataSources, declaration]
+  )
+  const unitSharings = useMemo(
+    () => sharings.filter(s => declaration && s.unit_id === declaration.unit_id),
+    [sharings, declaration]
+  )
+
   const counts = useMemo(() => {
-    const items: { item_status?: ItemStatus }[] = [...inventories, ...dataSources, ...sharings]
+    const items: { item_status?: ItemStatus }[] = [...unitInventories, ...unitDataSources, ...unitSharings]
     const tally: Record<ItemStatus, number> = { mantido: 0, alterado: 0, encerrado: 0, novo: 0 }
     items.forEach(i => {
       const status = (i.item_status || 'novo') as ItemStatus
       tally[status] = (tally[status] || 0) + 1
     })
     return tally
-  }, [inventories, dataSources, sharings])
+  }, [unitInventories, unitDataSources, unitSharings])
 
   const changedFeed = useMemo(() => {
     const feed: { kind: FeedKind; id: string; title: string; status: ItemStatus; detail: string }[] = []
-    inventories.forEach(i => {
+    unitInventories.forEach(i => {
       const status = (i.item_status || 'novo') as ItemStatus
       if (status === 'mantido') return
       feed.push({
@@ -90,7 +129,7 @@ export const AprovacoesPanel: React.FC<AprovacoesPanelProps> = ({
             : 'Cadastrado neste ciclo.'
       })
     })
-    dataSources.forEach(d => {
+    unitDataSources.forEach(d => {
       const status = (d.item_status || 'novo') as ItemStatus
       if (status === 'mantido') return
       feed.push({
@@ -106,7 +145,7 @@ export const AprovacoesPanel: React.FC<AprovacoesPanelProps> = ({
             : 'Cadastrada neste ciclo.'
       })
     })
-    sharings.forEach(s => {
+    unitSharings.forEach(s => {
       const status = (s.item_status || 'novo') as ItemStatus
       if (status === 'mantido') return
       feed.push({
@@ -123,13 +162,13 @@ export const AprovacoesPanel: React.FC<AprovacoesPanelProps> = ({
       })
     })
     return feed
-  }, [inventories, dataSources, sharings])
+  }, [unitInventories, unitDataSources, unitSharings])
 
   const riskFeed = useMemo(() => {
-    return inventories.flatMap(inv =>
+    return unitInventories.flatMap(inv =>
       riskReport(inv.form_data).map(r => ({ ...r, title: inv.title || 'Sem título', inventory: inv }))
     )
-  }, [inventories])
+  }, [unitInventories])
 
   const submitterName = declaration?.submitted_by
     ? allUsers.find(u => u.id === declaration.submitted_by)?.full_name || 'Ponto focal'
@@ -166,7 +205,7 @@ export const AprovacoesPanel: React.FC<AprovacoesPanelProps> = ({
           <Inbox size={32} className="text-muted" />
           <p>
             {declaration?.status === 'em_homologacao'
-              ? 'A declaração já foi aprovada e está com o Encarregado para homologação.'
+              ? 'A declaração já foi aprovada e aguarda homologação.'
               : declaration?.status === 'homologada'
               ? 'A declaração deste ciclo já foi homologada.'
               : 'Assim que o ponto focal enviar a declaração da unidade, ela aparece aqui para sua análise.'}
@@ -178,7 +217,30 @@ export const AprovacoesPanel: React.FC<AprovacoesPanelProps> = ({
 
   return (
     <div className="aprovacoes-panel">
-      <span className="declaracao-eyebrow">APROVAÇÃO {user.unit ? `· ${user.unit.toUpperCase()}` : ''}</span>
+      <span className="declaracao-eyebrow">APROVAÇÃO · {unitName(declaration?.unit_id).toUpperCase()}</span>
+      {pendingDeclarations.length > 1 && (
+        <div className="aprovacoes-unit-picker">
+          <label htmlFor="aprovacoes-unit">
+            {pendingDeclarations.length} declarações aguardando análise — escolha a área:
+          </label>
+          <select
+            id="aprovacoes-unit"
+            className="custom-select-large select-compact"
+            value={declaration?.id || ''}
+            onChange={e => {
+              setSelectedId(e.target.value)
+              setObservation('')
+            }}
+          >
+            {pendingDeclarations.map(d => (
+              <option key={d.id} value={d.id}>
+                {unitName(d.unit_id)}
+                {d.submitted_at ? ` — enviada em ${new Date(d.submitted_at).toLocaleDateString('pt-BR')}` : ''}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
       <h1 className="aprovacoes-title">
         Declaração {cycle ? `do ${cycle.label}` : ''} aguardando você
       </h1>
@@ -232,7 +294,7 @@ export const AprovacoesPanel: React.FC<AprovacoesPanelProps> = ({
                       <button
                         type="button"
                         className="btn-action-open"
-                        onClick={() => onOpenInventory(inventories.find(i => i.id === item.id)!)}
+                        onClick={() => onOpenInventory(unitInventories.find(i => i.id === item.id)!)}
                       >
                         Abrir
                       </button>
@@ -246,7 +308,7 @@ export const AprovacoesPanel: React.FC<AprovacoesPanelProps> = ({
           <section className="table-card glass-card aprovacoes-card">
             <div className="aprovacoes-card-header">
               <h2>Diagnóstico do motor de risco</h2>
-              <span className="aprovacoes-card-subtitle">Triagem automática — não substitui o parecer do Encarregado.</span>
+              <span className="aprovacoes-card-subtitle">Triagem automática — não substitui o parecer do Encarregado (DPO).</span>
             </div>
             <div className="aprovacoes-risk-grid">
               {riskFeed.length === 0 && <p className="declaracao-empty">Nenhum risco identificado nas operações desta unidade.</p>}
@@ -282,7 +344,7 @@ export const AprovacoesPanel: React.FC<AprovacoesPanelProps> = ({
             disabled={busy !== null}
           >
             <CheckCircle2 size={17} />
-            <span>{busy === 'approve' ? 'Aprovando...' : 'Aprovar e enviar ao Encarregado'}</span>
+            <span>{busy === 'approve' ? 'Aprovando...' : 'Aprovar declaração'}</span>
           </button>
 
           <button
@@ -296,7 +358,7 @@ export const AprovacoesPanel: React.FC<AprovacoesPanelProps> = ({
           </button>
 
           <p className="aprovacoes-decision-note">
-            Ao aprovar, a unidade passa a "Em homologação" no painel do Encarregado e o ponto focal é notificado.
+            Ao aprovar, a unidade passa a "Em homologação" e o ponto focal é notificado.
           </p>
         </aside>
       </div>

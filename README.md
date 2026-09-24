@@ -27,7 +27,7 @@ Não há back-end próprio: todo acesso a dados é feito diretamente do front-en
    npm run dev
    ```
 
-4. Promova o primeiro usuário rodando o `update` comentado no fim do `schema.sql`, ou cadastre-se com um e-mail que contenha `master`, `admin`/`gestor` ou `dpo`/`encarregado` — `getRoleForEmail()` em [`src/main.tsx`](src/main.tsx) deduz o papel a partir disso (regra de conveniência para ambiente de desenvolvimento; em produção o papel real vem da tabela `profiles`, definido via Configurações → Usuários).
+4. Promova o primeiro usuário a Master rodando no SQL Editor `update public.profiles set role = 'master', must_change_password = false where email = 'SEU_EMAIL';`. O papel **nunca** é deduzido do e-mail: todo cadastro novo nasce `ponto_focal` (trigger `handle_new_user`) e só o Master muda perfis, em Configurações → Usuários e permissões. (No modo demonstração offline, sem Supabase, o e-mail ainda escolhe o perfil — só para testar a interface.)
 
 Scripts disponíveis: `npm run dev`, `npm run build` (`tsc -b && vite build`), `npm run preview`.
 
@@ -42,12 +42,14 @@ src/
   utils/
     lgpdRisk.ts                 # Regras de classificação de risco (roda 100% no cliente, sem IA)
     exportCsv.ts                 # Geração do CSV consolidado (Guia 3 SGD/MGI)
+    roles.ts                     # Perfis (ponto_focal/gestor/master): rótulos e regras de acesso do front
   components/
     auth/                      # Login, criação/troca de senha, cadastro de usuário (gestor)
     dashboard/                 # Shell pós-login: Sidebar, header, notificações, configurações, listagem
       InicioPanel.tsx           # Tela "Início" do ponto focal (progresso do ciclo, avisos)
       DeclaracaoPanel.tsx       # "Minha Declaração": operações, fontes de dados, compartilhamentos
-      AprovacoesPanel.tsx       # Tela de aprovação do gestor (só role admin/encarregado/master)
+      AprovacoesPanel.tsx       # Tela de aprovação (Gestor e Master)
+      RelatoriosPanel.tsx       # Dashboard "Relatórios" (Gestor e Master), só com dados reais do banco
     inventory/                 # Formulário multi-etapas de um inventário de processo
       SharingTable.tsx / TransferTable.tsx / ContractsTable.tsx  # Tabelas repetíveis (seções 11/13/14)
     common/                    # Componentes pequenos reaproveitados (ex.: RiskBadge)
@@ -60,13 +62,15 @@ supabase/schema.sql            # Única fonte de verdade do banco: tabelas, RLS,
 
 ## Papéis de acesso
 
-Definidos em `profiles.role` (coluna `text` com `check`, ver seção "Fase 1" do `schema.sql` — era um enum Postgres no início do projeto, convertido pra texto pra facilitar adicionar papéis novos): `user`, `admin`, `encarregado`, `master`.
+Definidos em `profiles.role` (coluna `text` com `check`): `ponto_focal`, `gestor`, `master`. A migração [`supabase/migration_03_perfis_relatorios.sql`](supabase/migration_03_perfis_relatorios.sql) converteu os valores antigos sem apagar ninguém: `user` → `ponto_focal`, `admin` → `gestor`, `encarregado`/`master` → `master`. O front ainda aceita os nomes antigos (`normalizeRole()` em `utils/roles.ts`) para não quebrar se o banco estiver atrasado.
 
-- **`user` (Operador de Dados / Ponto Focal)** — cria e edita seus próprios inventários (`owner_id`), só vê os próprios registros (garantido por RLS, não só pela UI). É a unidade básica: pertence a uma `unit` (`profiles.unit_id`).
-- **`admin` (Gestor de Unidade)** — aprova a declaração da própria unidade (tela "Aprovações"). Desde a Fase 1, fica restrito à própria `unit_id`; um admin **sem** `unit_id` definido ainda vê tudo (compatibilidade com o comportamento antigo, antes de existir o conceito de unidade — ver comentário no `schema.sql`).
-- **`encarregado` (DPO)** — visão da instituição inteira (todas as unidades), é quem homologa o ciclo depois que o gestor aprova (painel próprio ainda não construído).
-- **`master` (TI)** — superusuário, visão total, gerencia usuários. O e-mail fixo `catzzrule65@gmail.com` é tratado como master "hardcoded" em vários pontos (`MASTER_TI_EMAILS`) — histórico de bootstrap do projeto, não remova sem entender o impacto no primeiro acesso.
-- `encarregado` e `master` contam como "vê tudo" pro helper `isManagerProfile()` em `main.tsx` (junto com `admin`, que é unit-scoped); a checagem `isManager` é recalculada em cada componente que precisa dela.
+| Perfil | O que faz | Onde é garantido |
+|---|---|---|
+| **Ponto Focal** (antigo Operador de Dados) | Cria/edita os próprios inventários, preenche e envia a declaração da própria unidade. Não vê Relatórios nem Aprovações. Não muda o próprio perfil nem a própria unidade. | RLS de `inventories`/`unit_declarations` + triggers `guard_profile_privileges` e `guard_unit_declaration` |
+| **Gestor** (antigo Admin) | Vê os dados dos Pontos Focais da sua unidade (Gestor sem unidade vê todas), aprova/devolve declarações, devolve inventários, acessa o Dashboard. | `is_unit_manager()` nas policies |
+| **Master** (antigo Gestor/Encarregado) | Tudo do Gestor em todas as unidades + cadastrar usuários, alterar nome/perfil/unidade, enviar link de redefinição de senha, exigir troca de senha. | `is_master()` nas policies e no trigger de perfis |
+
+Não existem rotas por URL (o app é uma máquina de estados), então não há como "pular" para uma tela digitando o endereço; mesmo assim, cada tela restrita tem um guarda no `DashboardView` e **toda** leitura/escrita passa pela RLS do Supabase — chamar a API direto com o token de um Ponto Focal não devolve dados de outras unidades nem permite mudar o próprio perfil.
 
 ## Fluxos principais
 
@@ -74,11 +78,15 @@ Definidos em `profiles.role` (coluna `text` com `check`, ver seção "Fase 1" do
 
 **Inventário de processo (Operação de Tratamento)**: ponto focal clica em "Novo Inventário" → preenche o formulário multi-etapas (`InventoryFormView`) → salva como rascunho (`status: 'rascunho'`) quantas vezes quiser → ao clicar em concluir, o front valida os campos obrigatórios e grava `status: 'concluido'`. Também existem `data_sources` (fontes de dados) e `sharings` (compartilhamentos) como entidades próprias, cada uma com um `item_status` (`novo`/`alterado`/`encerrado`/`mantido`) pra rastrear mudanças ciclo a ciclo — hoje tudo nasce `novo` porque ainda não existe um ciclo anterior de verdade.
 
-**Minha Declaração → Aprovação → Homologação**: o ponto focal revisa os itens da unidade em "Minha Declaração" (`DeclaracaoPanel`) e clica em "Enviar para aprovação do gestor" (grava `submitted_at`/`submitted_by` em `unit_declarations`). O gestor vê isso na tela "Aprovações" (`AprovacoesPanel`) — quantidade de itens por status, o que mudou, diagnóstico de risco agregado (reaproveita `riskReport()`) — e pode **aprovar** (avança pra `em_homologacao`) ou **devolver** com uma observação obrigatória (limpa o `submitted_at`, manda notificação `type: 'returned'` pro ponto focal). A homologação final pelo Encarregado ainda não tem tela própria.
+**Minha Declaração → Aprovação → Homologação**: o ponto focal revisa os itens da unidade em "Minha Declaração" (`DeclaracaoPanel`) e clica em "Enviar para aprovação do gestor" (grava `submitted_at`/`submitted_by` em `unit_declarations`). O gestor vê isso na tela "Aprovações" (`AprovacoesPanel`) — quantidade de itens por status, o que mudou, diagnóstico de risco agregado (reaproveita `riskReport()`) — e pode **aprovar** (avança pra `em_homologacao`) ou **devolver** com uma observação obrigatória (limpa o `submitted_at`, manda notificação `type: 'returned'` pro ponto focal). Quando há várias unidades aguardando, o Gestor sem unidade e o Master escolhem a área num seletor no topo da tela. A homologação final ainda não tem tela própria.
 
 **Notificações (caixa de entrada)**: tabela `notifications` com três tipos — `submitted` (processo enviado, endereçado a todos os gestores), `returned` (devolvido, com mensagem obrigatória) e `approved` (declaração aprovada). Mostradas pelo sino no cabeçalho e nos cards de "Início". Protegidas por RLS (`schema.sql`), não por lógica de front-end.
 
-**Configurações**: tela com abas "Meu Perfil" (trocar nome/unidade/senha) e "Usuários" (gestor cadastra novos acessos, escolhendo entre os 4 papéis, e vê a lista de quem já tem conta — usa a coluna `profiles.email`).
+**Configurações**: aba "Meu Perfil" (nome e senha; a unidade só é editável pelo Master) e, só para o Master, "Usuários e permissões" (cadastrar, editar nome/perfil/unidade, enviar link de redefinição de senha por e-mail, exigir troca de senha no próximo acesso). O Master não altera o próprio perfil. A senha em si nunca é vista por ninguém — redefinir é sempre por link do Supabase Auth.
+
+**Relatórios (Dashboard)**: menu "Relatórios", visível só para Gestor e Master (`RelatoriosPanel`). Tudo vem das tabelas `inventories`, `unit_declarations`, `units`, `cycles`, `audit_log` e `profiles` — nada é fictício. Filtros: ciclo, área, periodicidade (campo 9.1 agrupado em faixas) e período (data de criação). Mostra % de áreas que concluíram, áreas pendentes, formulários concluídos/rascunhos, risco alto, situação de cada área, formulários por área, respostas por mês, periodicidade, nível de risco, tabela por área e histórico. Cada gráfico tem "Ver dados em tabela". O botão "Atualizar dados" recarrega do banco.
+
+**"Não se aplica"**: os campos de texto do formulário (e as tabelas das seções 11, 13 e 14) têm uma caixa "Não se aplica". Marcada, o campo é limpo, fica desabilitado exibindo "Não se aplica" e deixa de ser obrigatório. A marcação é salva em `inventories.form_data.not_applicable` (lista com as chaves dos campos). Assim dá para distinguir: preenchido (tem valor), não se aplica (chave na lista) e pendente (sem valor e fora da lista). O CSV e a listagem mostram "Não se aplica" escrito. A regra "obrigatório = preenchido ou marcado" existe no front (`validationErrors`) e no banco (trigger `validate_inventory_completion`, que recusa gravar `status = 'concluido'` com pendências).
 
 **Classificação de risco**: `utils/lgpdRisk.ts` calcula o nível de risco (`alto`/`medio`/`baixo`) e os motivos (`riskReport()`) localmente, a partir de regras fixas (dados sensíveis, ausência de base legal, prazo de retenção, compartilhamento com terceiros, transferência internacional). Não chama nenhuma IA/API externa — isso é intencional, ver `.env.example` e a seção de segurança abaixo.
 
@@ -97,7 +105,7 @@ Tudo em [`supabase/schema.sql`](supabase/schema.sql), executado manualmente no S
 - `inventories` — um registro por Operação de Tratamento; `owner_id` isola o acesso via RLS, `unit_id`/`cycle_id` escopam por unidade/ciclo, `item_status`/`closure_reason`/`closure_destination` rastreiam mudança ano a ano.
 - `data_sources` / `sharings` — Fontes de Dados e Compartilhamentos como entidades próprias (mesmo modelo de ciclo de vida do `inventories`), ligadas a uma unidade e um ciclo.
 - `data_source_columns` — colunas de uma fonte de dados a classificar (funcionalidade "Classificar colunas", ainda não construída na UI).
-- `audit_log` — trilha de quem fez o quê; já é escrita pelas ações de envio/aprovação/devolução de declaração, mas ainda não tem tela própria de visualização.
+- `audit_log` — trilha de quem fez o quê (envio/aprovação/devolução de declaração, devolução de inventário, cadastro e alteração de usuários); aparece no "Histórico" do Dashboard.
 - `notifications` — caixa de entrada de envio/devolução/aprovação (ver fluxo acima).
 
 O arquivo tem uma seção por "fase" de desenvolvimento (procure os cabeçalhos `-- FASE N`), cada uma pensada pra ser executada isoladamente (não precisa rodar o arquivo inteiro de novo). Ao alterar o schema, **edite `schema.sql` e documente a mudança como um bloco novo no final do arquivo**, com `if not exists`/`drop policy if exists`, para que o arquivo inteiro continue seguro de re-executar em um banco que já tem dados — e, se for algo que o usuário vai colar direto no SQL Editor, considere também salvar como um `supabase/migration_NN_nome.sql` avulso (evita erro de seleção de linha ao copiar só o trecho novo).
@@ -112,11 +120,11 @@ As env vars do Supabase têm um fallback hardcoded em `src/supabase.ts` (projeto
 
 - Autenticação e RLS do Supabase fazem o isolamento de dados — a UI nunca é a única barreira.
 - O verificador de risco roda 100% no cliente; nenhuma resposta de formulário é enviada a uma IA.
-- Exportação de CSV e gestão de usuários só aparecem para papéis de gestor.
+- Exportação de CSV aparece para Gestor e Master; gestão de usuários só para o Master (e o banco bloqueia mudança de perfil feita por qualquer outro usuário).
 
 ## Antes de ir pra produção de verdade
 
 - Exija MFA, configure domínio de redirecionamento de auth e revise as policies no painel do Supabase.
-- Restrinja quem tem papel `admin`/`encarregado`/`master` e mantenha auditoria de acesso.
+- Restrinja quem tem papel `gestor`/`master` e mantenha auditoria de acesso.
 - Faça uma avaliação formal com o encarregado/DPO — o verificador de risco é uma triagem automatizada, não um parecer jurídico.
 - Se for integrar IA no futuro, envie só metadados anonimizados, por um serviço de back-end — nunca com uma chave secreta exposta no navegador.

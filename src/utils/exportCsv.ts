@@ -1,5 +1,12 @@
 import { Inventory, TableRow, TransferRow, ContractRow } from '../types/inventory'
-import { getInputValue, riskReport } from './lgpdRisk'
+import {
+  displayValue,
+  getHighestRisk,
+  getInputValue,
+  isNotApplicable,
+  NOT_APPLICABLE_LABEL,
+  riskReport
+} from './lgpdRisk'
 
 export function exportInventoriesToCsv(inventories: Inventory[], unitFilter?: string) {
   const esc = (v: unknown) => `"${String(v ?? '').replaceAll('"', '""')}"`
@@ -45,45 +52,49 @@ export function exportInventoriesToCsv(inventories: Inventory[], unitFilter?: st
   const rows = filteredList.map(i => {
     const d = i.form_data
     const riskAnalysis = riskReport(d)
-    const highestRisk = riskAnalysis[0]?.level || 'baixo'
+    const highestRisk = getHighestRisk(d)
     const riskSummaryText = riskAnalysis.map(r => `[${r.level.toUpperCase()}] ${r.text}`).join(' | ')
 
-    // Format sharing items
-    const sharingList = (d.sharing as TableRow[] || [])
-      .map(s => `${s.institution || 'Terceiro'} (Dados: ${s.data || 'N/A'}, Finalidade: ${s.purpose || 'N/A'})`)
-      .join('; ')
+    // Campo a campo: "Não se aplica" aparece escrito, nunca como célula vazia.
+    const v = (key: string) => displayValue(d, key)
+    const join = (parts: string[], sep: string) => parts.filter(Boolean).join(sep)
 
-    // Format sensitive categories
+    const sharingList = isNotApplicable(d, 'sharing')
+      ? NOT_APPLICABLE_LABEL
+      : ((d.sharing as TableRow[]) || [])
+          .map(s => `${s.institution || 'Terceiro'} (Dados: ${s.data || 'N/A'}, Finalidade: ${s.purpose || 'N/A'})`)
+          .join('; ')
+
     const sensitiveList = ((d.sensitive_categories as string[]) || []).join('; ')
     const categoriesList = ((d.data_categories as string[]) || []).join('; ')
-    const lifecycleList = [
-      ((d.lifecycle as string[]) || []).join('; '),
-      getInputValue(d, 'lifecycle_description')
-    ].filter(Boolean).join(' — ')
+    const lifecycleList = join([((d.lifecycle as string[]) || []).join('; '), v('lifecycle_description')], ' — ')
     const vulnerableList = ((d.vulnerable_groups as string[]) || []).join('; ')
 
-    const geoAndSource = [getInputValue(d, 'geography'), getInputValue(d, 'data_source')].filter(Boolean).join(' | ')
-    const freqAndVol = [getInputValue(d, 'frequency'), getInputValue(d, 'data_volume')].filter(Boolean).join(' | ')
+    const geoAndSource = join([v('geography'), v('data_source')], ' | ')
+    const freqAndVol = join([v('frequency'), v('data_volume')], ' | ')
 
-    const legalBasisFull = [getInputValue(d, 'legal_basis'), getInputValue(d, 'legal_provision')].filter(Boolean).join(' | Previsão legal: ')
-    const purposeFull = [getInputValue(d, 'purpose'), getInputValue(d, 'expected_results'), getInputValue(d, 'expected_benefits')]
-      .filter(Boolean)
-      .join(' | ')
+    const legalProvision = v('legal_provision')
+    const legalBasisFull = join([v('legal_basis'), legalProvision ? `Previsão legal: ${legalProvision}` : ''], ' | ')
+    const purposeFull = join([v('purpose'), v('expected_results'), v('expected_benefits')], ' | ')
 
-    const categoriesFull = [categoriesList, getInputValue(d, 'data_categories_description')].filter(Boolean).join(' — ')
-    const sensitiveFull = [sensitiveList, getInputValue(d, 'sensitive_categories_description')].filter(Boolean).join(' — ')
+    const categoriesFull = join([categoriesList, v('data_categories_description')], ' — ')
+    const sensitiveFull = join([sensitiveList, v('sensitive_categories_description')], ' — ')
 
-    const securityFull = [getInputValue(d, 'security_type'), getInputValue(d, 'security')].filter(Boolean).join(': ')
+    const securityFull = join([v('security_type'), v('security')], ': ')
 
     const transfersList = (d.international_transfers as TransferRow[]) || []
-    const transferText = transfersList.length
+    const transferText = isNotApplicable(d, 'international_transfers')
+      ? NOT_APPLICABLE_LABEL
+      : transfersList.length
       ? transfersList
           .map(t => `${t.country || 'País N/A'} (Dados: ${t.data || 'N/A'}, Garantia: ${t.guarantee || 'N/A'})`)
           .join('; ')
       : getInputValue(d, 'international_transfer')
 
     const contractsListValues = (d.contracts_list as ContractRow[]) || []
-    const contractsText = contractsListValues.length
+    const contractsText = isNotApplicable(d, 'contracts_list')
+      ? NOT_APPLICABLE_LABEL
+      : contractsListValues.length
       ? contractsListValues
           .map(c => `${c.number || 'Processo N/A'} — ${c.object || 'Objeto N/A'} (Gestor: ${c.managerEmail || 'N/A'})`)
           .join('; ')
@@ -92,27 +103,27 @@ export function exportInventoriesToCsv(inventories: Inventory[], unitFilter?: st
     return [
       getInputValue(d, 'unit') || 'Não informada',
       i.title || 'Sem título',
-      i.reference_id || '—',
-      getInputValue(d, 'system_name') || 'Não informado',
+      isNotApplicable(d, 'reference_id') ? NOT_APPLICABLE_LABEL : i.reference_id || '—',
+      v('system_name') || 'Não informado',
       i.status === 'concluido' ? 'Concluído' : 'Rascunho',
       new Date(i.updated_at).toLocaleDateString('pt-BR'),
-      getInputValue(d, 'controller_name'),
-      getInputValue(d, 'controller_email'),
-      getInputValue(d, 'controller_phone'),
-      getInputValue(d, 'dpo_name'),
-      getInputValue(d, 'dpo_email'),
-      getInputValue(d, 'operator_name'),
+      v('controller_name'),
+      v('controller_email'),
+      v('controller_phone'),
+      v('dpo_name'),
+      v('dpo_email'),
+      v('operator_name'),
       lifecycleList || 'Não especificado',
-      getInputValue(d, 'flow'),
+      v('flow'),
       geoAndSource || 'Não especificado',
       legalBasisFull,
       purposeFull,
       categoriesFull || 'Nenhuma selecionada',
       sensitiveFull || 'Nenhum dado sensível marcado',
-      getInputValue(d, 'retention_period'),
-      getInputValue(d, 'database'),
+      v('retention_period'),
+      v('database'),
       freqAndVol || 'Não informado',
-      getInputValue(d, 'data_subjects') + (vulnerableList ? ` (Vulneráveis: ${vulnerableList})` : ''),
+      join([v('data_subjects'), vulnerableList ? `(Vulneráveis: ${vulnerableList})` : ''], ' '),
       sharingList || 'Sem compartilhamento registrado',
       securityFull,
       transferText || 'Não há transferência internacional',

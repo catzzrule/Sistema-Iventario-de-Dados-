@@ -12,22 +12,28 @@ import {
   Settings
 } from 'lucide-react'
 
-const managerOnlyItems = [
+const upcomingManagerItems = [
   { icon: <ClipboardList size={18} />, label: 'Mapeamento de processos' },
-  { icon: <BarChart3 size={18} />, label: 'Relatórios' },
   { icon: <Building2 size={18} />, label: 'Unidades e sistemas' }
 ]
 
-export type DashboardSection = 'inicio' | 'declaracao' | 'aprovacoes' | 'overview' | 'settings'
+export type DashboardSection = 'inicio' | 'declaracao' | 'aprovacoes' | 'relatorios' | 'overview' | 'settings'
 
 interface SidebarProps {
   isManager: boolean
+  canViewReports: boolean
   activeView: DashboardSection
   onNavigate: (view: DashboardSection) => void
   pendingApprovalsCount?: number
 }
 
-export const Sidebar: React.FC<SidebarProps> = ({ isManager, activeView, onNavigate, pendingApprovalsCount = 0 }) => {
+export const Sidebar: React.FC<SidebarProps> = ({
+  isManager,
+  canViewReports,
+  activeView,
+  onNavigate,
+  pendingApprovalsCount = 0
+}) => {
   return (
     <aside className="app-sidebar">
       <nav className="sidebar-nav">
@@ -71,7 +77,18 @@ export const Sidebar: React.FC<SidebarProps> = ({ isManager, activeView, onNavig
           <span>Visão geral</span>
           {activeView === 'overview' && <span className="sidebar-active-dot" aria-hidden="true" />}
         </button>
-        {isManager && managerOnlyItems.map(item => (
+        {canViewReports && (
+          <button
+            type="button"
+            className={`sidebar-nav-item ${activeView === 'relatorios' ? 'active' : ''}`}
+            onClick={() => onNavigate('relatorios')}
+          >
+            <BarChart3 size={18} />
+            <span>Relatórios</span>
+            {activeView === 'relatorios' && <span className="sidebar-active-dot" aria-hidden="true" />}
+          </button>
+        )}
+        {isManager && upcomingManagerItems.map(item => (
           <button
             type="button"
             key={item.label}

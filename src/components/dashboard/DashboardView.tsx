@@ -1,6 +1,21 @@
 import React, { useState, useMemo } from 'react'
-import { AppNotification, Cycle, DataSource, Inventory, ManagedProfile, Sharing, UnitDeclaration, UserProfile, Role } from '../../types/inventory'
-import { getInputValue, getHighestRisk } from '../../utils/lgpdRisk'
+import {
+  AppNotification,
+  AuditLogEntry,
+  Cycle,
+  DataSource,
+  Inventory,
+  ManagedProfile,
+  ManagedUserUpdate,
+  Sharing,
+  Unit,
+  UnitDeclaration,
+  UserProfile,
+  Role
+} from '../../types/inventory'
+import { displayValue, getInputValue, getHighestRisk } from '../../utils/lgpdRisk'
+import { canViewReports, isManagerRole, isMasterRole, ROLE_LABELS } from '../../utils/roles'
+import { RelatoriosPanel } from './RelatoriosPanel'
 import { StatCard } from './StatCard'
 import { Sidebar, DashboardSection } from './Sidebar'
 import { NotificationBell } from './NotificationBell'
@@ -43,6 +58,13 @@ interface DashboardViewProps {
   dataSources?: DataSource[]
   sharings?: Sharing[]
   unitDeclarations?: UnitDeclaration[]
+  units?: Unit[]
+  cycles?: Cycle[]
+  auditLog?: AuditLogEntry[]
+  onRefreshReports?: () => Promise<void>
+  onUpdateUser?: (targetId: string, updates: ManagedUserUpdate) => Promise<void>
+  onSendPasswordReset?: (email: string) => Promise<void>
+  onForcePasswordChange?: (targetId: string) => Promise<void>
   onMarkNotificationRead?: (id: string) => void
   onReturnInventory?: (inventory: Inventory, message: string) => Promise<void>
   onUpdateProfile?: (updates: { full_name: string; unit: string }) => Promise<void>
@@ -76,6 +98,13 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   dataSources = [],
   sharings = [],
   unitDeclarations = [],
+  units = [],
+  cycles = [],
+  auditLog = [],
+  onRefreshReports,
+  onUpdateUser,
+  onSendPasswordReset,
+  onForcePasswordChange,
   onMarkNotificationRead,
   onReturnInventory,
   onUpdateProfile,
@@ -93,20 +122,34 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   onExport,
   onCreateUser
 }) => {
-  const isManager =
-    user?.role === 'admin' ||
-    user?.role === 'master' ||
-    user?.role === 'encarregado' ||
-    user?.email?.toLowerCase() === 'catzzrule65@gmail.com'
+  const isManager = isManagerRole(user.role)
+  const isMaster = isMasterRole(user.role)
+  const defaultView: DashboardSection = isManager ? 'aprovacoes' : 'inicio'
 
-  const [activeView, setActiveView] = useState<DashboardSection>(isManager ? 'aprovacoes' : 'inicio')
+  const [requestedView, setActiveView] = useState<DashboardSection>(defaultView)
 
+  // Defesa em profundidade: mesmo que alguém force o estado da tela pelo
+  // devtools, as seções restritas não renderizam para quem não tem o perfil
+  // (e a RLS do banco não devolve os dados de qualquer forma).
+  const canAccessView = (view: DashboardSection) => {
+    if (view === 'relatorios') return canViewReports(user.role)
+    if (view === 'aprovacoes') return isManager
+    return true
+  }
+  const activeView: DashboardSection = canAccessView(requestedView) ? requestedView : defaultView
+
+  // Declarações enviadas e ainda não aprovadas, de qualquer unidade visível
+  // (a RLS já limita às unidades do Gestor; o Master vê todas).
   const pendingApprovalsCount = useMemo(
     () =>
       unitDeclarations.filter(
-        d => d.unit_id === user.unit_id && d.cycle_id === cycle?.id && d.submitted_at && d.status === 'em_preenchimento'
+        d =>
+          d.cycle_id === cycle?.id &&
+          d.submitted_at &&
+          d.status === 'em_preenchimento' &&
+          (isMaster || !user.unit_id || d.unit_id === user.unit_id)
       ).length,
-    [unitDeclarations, user.unit_id, cycle]
+    [unitDeclarations, cycle, isMaster, user.unit_id]
   )
 
   const myUnitDeclaration = useMemo(
@@ -208,20 +251,15 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       await onReturnInventory(returnTarget, returnMessage.trim())
       setReturnTarget(null)
       setReturnMessage('')
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Não foi possível devolver o processo.')
     } finally {
       setReturning(false)
     }
   }
 
   const displayName = user.full_name || user.email
-  const roleLabel =
-    user.role === 'admin'
-      ? 'Administrador de Dados'
-      : user.role === 'master'
-      ? 'Master (TI)'
-      : user.role === 'encarregado'
-      ? 'Encarregado (DPO)'
-      : 'Operador de Dados'
+  const roleLabel = ROLE_LABELS[user.role]
   const initials = displayName
     .split(/[\s@.]+/)
     .filter(Boolean)
@@ -295,6 +333,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       <div className="app-body">
         <Sidebar
           isManager={isManager}
+          canViewReports={canViewReports(user.role)}
           activeView={activeView}
           onNavigate={setActiveView}
           pendingApprovalsCount={pendingApprovalsCount}
@@ -305,11 +344,15 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         {activeView === 'settings' ? (
           <SettingsPanel
             user={user}
-            isManager={isManager}
+            isMaster={isMaster}
             allUsers={allUsers}
+            units={units}
             onUpdateProfile={onUpdateProfile || (async () => {})}
             onUpdatePassword={onUpdatePassword || (async () => {})}
-            onCreateUser={onCreateUser}
+            onCreateUser={isMaster ? onCreateUser : undefined}
+            onUpdateUser={isMaster ? onUpdateUser : undefined}
+            onSendPasswordReset={isMaster ? onSendPasswordReset : undefined}
+            onForcePasswordChange={isMaster ? onForcePasswordChange : undefined}
           />
         ) : activeView === 'inicio' ? (
           <InicioPanel
@@ -349,9 +392,22 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             sharings={sharings}
             unitDeclarations={unitDeclarations}
             allUsers={allUsers}
+            units={units}
             onApprove={onApproveDeclaration || (async () => {})}
             onReturn={onReturnDeclaration || (async () => {})}
             onOpenInventory={onEdit}
+          />
+        ) : activeView === 'relatorios' ? (
+          <RelatoriosPanel
+            user={user}
+            inventories={inventories}
+            units={units}
+            cycles={cycles}
+            currentCycle={cycle}
+            unitDeclarations={unitDeclarations}
+            auditLog={auditLog}
+            allUsers={allUsers}
+            onRefresh={onRefreshReports}
           />
         ) : (
         <>
@@ -444,9 +500,11 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               <ShieldAlert size={20} />
             </div>
             <div>
-              <strong>Modo Gestor / Encarregado (DPO / TI) Ativo</strong>
+              <strong>Perfil {roleLabel} ativo</strong>
               <p>
-                Você tem permissão para auditar todos os processos, acompanhar matrizes de risco, cadastrar novos usuários com senha provisória (TI), receber alertas específicos de titulares vulneráveis (Art. 14) e extrair planilhas por Unidade Administrativa.
+                {isMaster
+                  ? 'Você tem acesso total: todas as áreas, relatórios, aprovações, cadastro e gestão de usuários e permissões.'
+                  : 'Você acompanha e aprova os dados enviados pelos Pontos Focais da sua área, acessa os relatórios, a matriz de risco e a extração de planilhas.'}
               </p>
             </div>
           </div>
@@ -715,7 +773,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                 {filteredInventories.length > 0 ? (
                   filteredInventories.map(item => {
                     const highestRisk = getHighestRisk(item.form_data)
-                    const systemName = getInputValue(item.form_data, 'system_name')
+                    const systemName = displayValue(item.form_data, 'system_name')
                     const unitName = getInputValue(item.form_data, 'unit')
                     const purposeName = getInputValue(item.form_data, 'purpose')
                     const vulnerableGroups = (item.form_data.vulnerable_groups as string[]) || []

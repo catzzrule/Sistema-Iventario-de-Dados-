@@ -1,4 +1,4 @@
-export type Role = 'admin' | 'user' | 'master' | 'encarregado'
+export type Role = 'ponto_focal' | 'gestor' | 'master'
 
 export type ItemStatus = 'mantido' | 'alterado' | 'encerrado' | 'novo'
 
@@ -93,6 +93,7 @@ export type FormData = {
   international_transfers?: TransferRow[]
   contracts?: string
   contracts_list?: ContractRow[]
+  not_applicable?: string[]
   [key: string]: unknown
 }
 
@@ -101,6 +102,7 @@ export type Inventory = {
   owner_id?: string
   unit_id?: string | null
   cycle_id?: string | null
+  created_at?: string
   item_status?: ItemStatus
   change_description?: string | null
   closure_reason?: string | null
@@ -201,5 +203,24 @@ export type ManagedProfile = {
   unit: string | null
   unit_id?: string | null
   role: Role
+  must_change_password?: boolean
   created_at: string
+}
+
+export type AuditLogEntry = {
+  id: string
+  unit_id: string | null
+  cycle_id: string | null
+  actor_id: string | null
+  action: string
+  entity_type: string | null
+  entity_id: string | null
+  detail: string | null
+  created_at: string
+}
+
+export type ManagedUserUpdate = {
+  full_name: string
+  role: Role
+  unit: string
 }

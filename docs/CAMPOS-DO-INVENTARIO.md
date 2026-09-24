@@ -71,7 +71,17 @@ Se for reconstruir o sistema, **decida essas listas de valores antes de montar a
 
 ## Validação: quando um processo pode ser marcado como "Concluído"
 
-A função `validateForm()` em `InventoryFormView.tsx` é a lista oficial de campos obrigatórios (coluna "Obrigatório?" da tabela acima reflete exatamente essas regras). Um processo salvo como rascunho pode ficar incompleto; só ao clicar em "Concluir" essas validações são checadas — se faltar algo, o formulário pula direto pra aba com o erro.
+O `validationErrors` em `InventoryFormView.tsx` é a lista oficial de campos obrigatórios (coluna "Obrigatório?" da tabela acima reflete exatamente essas regras), espelhada no banco pelo trigger `validate_inventory_completion` ([`supabase/migration_03_perfis_relatorios.sql`](../supabase/migration_03_perfis_relatorios.sql)). Um processo salvo como rascunho pode ficar incompleto; só ao clicar em "Concluir" essas validações são checadas — se faltar algo, o formulário pula direto pra aba com o erro.
+
+### "Não se aplica"
+
+Todo campo de texto (exceto 1.2 Nome do processo, 1.4 Data de criação, 1.5 Unidade, as seleções de tecnologia 1.1a–c e os campos de marcar opções) tem uma caixa "Não se aplica"; as tabelas das seções 11, 13 e 14 também, no título da seção. Marcar:
+
+- grava a chave do campo em `form_data.not_applicable` (ex.: `["dpo_email", "sharing"]`);
+- limpa o valor digitado e desabilita o campo, que passa a exibir "Não se aplica";
+- faz o campo obrigatório contar como respondido.
+
+Regra única (front e banco): **obrigatório sem valor e sem "Não se aplica" = erro**. Na exportação CSV o texto "Não se aplica" aparece na célula. Registros antigos, sem `not_applicable`, continuam válidos (a lista ausente é tratada como vazia) e processos já concluídos antes da mudança não são revalidados.
 
 ## Exportação CSV: as 28 colunas do relatório
 

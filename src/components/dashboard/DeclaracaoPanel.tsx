@@ -10,6 +10,7 @@ import {
   Send,
   CheckCircle2
 } from 'lucide-react'
+import { isMasterRole } from '../../utils/roles'
 import { Cycle, DataSource, Inventory, Sharing, UnitDeclaration, UserProfile } from '../../types/inventory'
 
 type CloseKind = 'inventory' | 'data_source' | 'sharing'
@@ -88,6 +89,8 @@ export const DeclaracaoPanel: React.FC<DeclaracaoPanelProps> = ({
     activeInventories.filter(i => i.status === 'concluido').length + activeSources.length + activeSharings.length
 
   const noUnit = !user.unit_id
+  // O Master é o último nível: não há para quem enviar a declaração.
+  const canSubmit = !isMasterRole(user.role)
 
   async function handleConfirmClose() {
     if (!closing || !closeReason.trim() || !closeDestination.trim()) return
@@ -339,11 +342,12 @@ export const DeclaracaoPanel: React.FC<DeclaracaoPanelProps> = ({
         </div>
       </section>
 
+      {canSubmit && (
       <div className="declaracao-submit-footer">
         {isBeyondSubmission ? (
           <span className="declaracao-submit-status declaracao-submit-status-done">
             <CheckCircle2 size={15} />
-            {declaration?.status === 'homologada' ? 'Declaração homologada para este ciclo.' : 'Declaração aprovada — aguardando homologação do Encarregado.'}
+            {declaration?.status === 'homologada' ? 'Declaração homologada para este ciclo.' : 'Declaração aprovada — aguardando homologação.'}
           </span>
         ) : isSubmitted ? (
           <span className="declaracao-submit-status">
@@ -365,6 +369,7 @@ export const DeclaracaoPanel: React.FC<DeclaracaoPanelProps> = ({
           <span>{submitting ? 'Enviando...' : 'Enviar para aprovação do Master'}</span>
         </button>
       </div>
+      )}
 
       {/* Modal: Nova Fonte de Dados */}
       {sourceModalOpen && (

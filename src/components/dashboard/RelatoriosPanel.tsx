@@ -82,7 +82,8 @@ const AUDIT_LABELS: Record<string, string> = {
   returned: 'Declaração devolvida',
   inventory_returned: 'Inventário devolvido para ajuste',
   user_created: 'Usuário cadastrado',
-  user_updated: 'Usuário alterado'
+  user_updated: 'Usuário alterado',
+  user_deleted: 'Usuário excluído'
 }
 
 function normalizeText(value: string) {

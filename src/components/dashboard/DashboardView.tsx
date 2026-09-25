@@ -65,6 +65,7 @@ interface DashboardViewProps {
   onUpdateUser?: (targetId: string, updates: ManagedUserUpdate) => Promise<void>
   onSendPasswordReset?: (email: string) => Promise<void>
   onForcePasswordChange?: (targetId: string) => Promise<void>
+  onDeleteUser?: (targetId: string, transferTo: string) => Promise<void>
   onMarkNotificationRead?: (id: string) => void
   onReturnInventory?: (inventory: Inventory, message: string) => Promise<void>
   onUpdateProfile?: (updates: { full_name: string; unit: string }) => Promise<void>
@@ -105,6 +106,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   onUpdateUser,
   onSendPasswordReset,
   onForcePasswordChange,
+  onDeleteUser,
   onMarkNotificationRead,
   onReturnInventory,
   onUpdateProfile,
@@ -353,6 +355,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             onUpdateUser={isMaster ? onUpdateUser : undefined}
             onSendPasswordReset={isMaster ? onSendPasswordReset : undefined}
             onForcePasswordChange={isMaster ? onForcePasswordChange : undefined}
+            onDeleteUser={isMaster ? onDeleteUser : undefined}
           />
         ) : activeView === 'inicio' ? (
           <InicioPanel

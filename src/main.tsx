@@ -701,6 +701,15 @@ function App() {
     await loadAllUsers()
   }
 
+  // A exclusão roda no banco (função admin_delete_user), que confere se quem
+  // pede é Master e transfere os inventários antes de apagar o login.
+  async function handleDeleteUser(targetId: string, transferTo: string) {
+    if (!supabase || !isMasterRole(user?.role)) throw new Error('Somente o Master pode excluir usuários.')
+    const { error } = await supabase.rpc('admin_delete_user', { target_user: targetId, transfer_to: transferTo })
+    if (error) throw error
+    await Promise.all([loadAllUsers(), loadInventories(), loadAuditLog()])
+  }
+
   async function handleUpdateOwnPassword(newPassword: string) {
     if (!supabase) return
     const { error } = await supabase.auth.updateUser({ password: newPassword })
@@ -845,6 +854,7 @@ function App() {
       onUpdateUser={handleMasterUpdateUser}
       onSendPasswordReset={handleSendPasswordReset}
       onForcePasswordChange={handleForcePasswordChange}
+      onDeleteUser={handleDeleteUser}
       onMarkNotificationRead={handleMarkNotificationRead}
       onReturnInventory={handleReturnInventory}
       onUpdateProfile={handleUpdateProfile}

@@ -11,6 +11,7 @@ import {
   Pencil,
   KeyRound,
   RotateCcw,
+  Trash2,
   X
 } from 'lucide-react'
 import { ManagedProfile, ManagedUserUpdate, Role, Unit, UserProfile } from '../../types/inventory'
@@ -34,6 +35,7 @@ interface SettingsPanelProps {
   onUpdateUser?: (targetId: string, updates: ManagedUserUpdate) => Promise<void>
   onSendPasswordReset?: (email: string) => Promise<void>
   onForcePasswordChange?: (targetId: string) => Promise<void>
+  onDeleteUser?: (targetId: string, transferTo: string) => Promise<void>
 }
 
 const ROLE_OPTIONS: Role[] = ['ponto_focal', 'gestor', 'master']
@@ -48,7 +50,8 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
   onCreateUser,
   onUpdateUser,
   onSendPasswordReset,
-  onForcePasswordChange
+  onForcePasswordChange,
+  onDeleteUser
 }) => {
   const [tab, setTab] = useState<'perfil' | 'usuarios'>('perfil')
 
@@ -72,6 +75,12 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
   const [editUnit, setEditUnit] = useState('')
   const [editBusy, setEditBusy] = useState(false)
   const [editError, setEditError] = useState('')
+
+  const [deletingUser, setDeletingUser] = useState<ManagedProfile | null>(null)
+  const [transferTo, setTransferTo] = useState('')
+  const [deleteConfirm, setDeleteConfirm] = useState('')
+  const [deleteBusy, setDeleteBusy] = useState(false)
+  const [deleteError, setDeleteError] = useState('')
 
   const [usersMessage, setUsersMessage] = useState('')
   const [usersError, setUsersError] = useState('')
@@ -145,6 +154,33 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
       setEditBusy(false)
     }
   }
+
+  function openDelete(u: ManagedProfile) {
+    setDeletingUser(u)
+    setTransferTo(user.id || '')
+    setDeleteConfirm('')
+    setDeleteError('')
+  }
+
+  async function handleDeleteUser(e: React.FormEvent) {
+    e.preventDefault()
+    if (!deletingUser || !onDeleteUser || !transferTo) return
+    setDeleteBusy(true)
+    setDeleteError('')
+    try {
+      await onDeleteUser(deletingUser.id, transferTo)
+      setUsersMessage(`Usuário ${deletingUser.email || deletingUser.full_name || ''} excluído.`)
+      setUsersError('')
+      setDeletingUser(null)
+    } catch (err) {
+      setDeleteError(err instanceof Error ? err.message : 'Não foi possível excluir o usuário.')
+    } finally {
+      setDeleteBusy(false)
+    }
+  }
+
+  const deleteTarget = deletingUser ? deletingUser.email || deletingUser.full_name || 'este usuário' : ''
+  const deleteConfirmed = deleteConfirm.trim().toUpperCase() === 'EXCLUIR'
 
   async function runUserAction(action: () => Promise<void>, success: string) {
     setUsersMessage('')
@@ -426,6 +462,17 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
                               <RotateCcw size={15} />
                             </button>
                           )}
+                          {onDeleteUser && u.id !== user.id && (
+                            <button
+                              type="button"
+                              className="btn-action-delete btn-action-danger"
+                              title="Excluir usuário"
+                              aria-label={`Excluir usuário ${u.email || u.full_name || ''}`}
+                              onClick={() => openDelete(u)}
+                            >
+                              <Trash2 size={15} />
+                            </button>
+                          )}
                         </div>
                       </td>
                     </tr>
@@ -518,6 +565,74 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
                 </button>
                 <button type="submit" className="btn-primary btn-sm shadow-emerald" disabled={editBusy}>
                   {editBusy ? 'Salvando...' : 'Salvar'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {deletingUser && onDeleteUser && (
+        <div className="modal-backdrop-overlay" onClick={() => (!deleteBusy ? setDeletingUser(null) : null)}>
+          <div className="modal-card-custom glass-card" onClick={e => e.stopPropagation()}>
+            <div className="modal-header">
+              <div className="modal-icon-badge modal-icon-danger">
+                <Trash2 size={22} />
+              </div>
+              <div className="flex-1">
+                <h3>Excluir usuário</h3>
+                <p>{deleteTarget}</p>
+              </div>
+              <button type="button" onClick={() => setDeletingUser(null)} className="btn-icon" aria-label="Fechar">
+                <X size={18} />
+              </button>
+            </div>
+            <form onSubmit={handleDeleteUser}>
+              <div className="modal-body margin-top">
+                <div className="alert-box alert-error flex-center-gap">
+                  <AlertTriangle size={16} />
+                  <span>O acesso de {deleteTarget} será apagado e não poderá ser recuperado.</span>
+                </div>
+                <div className="form-field margin-top-xs">
+                  <label htmlFor="delete-transfer">Transferir os inventários deste usuário para</label>
+                  <select
+                    id="delete-transfer"
+                    value={transferTo}
+                    onChange={e => setTransferTo(e.target.value)}
+                    className="custom-select-large select-compact"
+                  >
+                    {allUsers
+                      .filter(u => u.id !== deletingUser.id)
+                      .map(u => (
+                        <option key={u.id} value={u.id}>
+                          {u.full_name || u.email} — {ROLE_LABELS[u.role]}
+                          {u.id === user.id ? ' (você)' : ''}
+                        </option>
+                      ))}
+                  </select>
+                  <span className="settings-hint">
+                    Os inventários não são apagados: eles pertencem à área. O histórico registra a exclusão.
+                  </span>
+                </div>
+                <div className="form-field margin-top-xs">
+                  <label htmlFor="delete-confirm">Para confirmar, digite EXCLUIR</label>
+                  <input
+                    id="delete-confirm"
+                    type="text"
+                    value={deleteConfirm}
+                    onChange={e => setDeleteConfirm(e.target.value)}
+                    className="custom-select-large"
+                    autoComplete="off"
+                  />
+                </div>
+                {deleteError && <div className="alert-box alert-error margin-top-xs">{deleteError}</div>}
+              </div>
+              <div className="modal-footer margin-top">
+                <button type="button" className="btn-secondary btn-sm" onClick={() => setDeletingUser(null)} disabled={deleteBusy}>
+                  Cancelar
+                </button>
+                <button type="submit" className="btn-danger-outline btn-sm" disabled={deleteBusy || !deleteConfirmed || !transferTo}>
+                  {deleteBusy ? 'Excluindo...' : 'Excluir usuário'}
                 </button>
               </div>
             </form>

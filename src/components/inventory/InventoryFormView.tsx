@@ -51,6 +51,39 @@ interface InventoryFormViewProps {
   readOnly?: boolean
 }
 
+// "Não se aplica" só existe nas perguntas opcionais. Os obrigatórios (*)
+// sempre exigem resposta — mesma lista validada pelo banco.
+const REQUIRED_FIELDS = [
+  'system_name',
+  'reference_id',
+  'controller_name',
+  'controller_email',
+  'controller_phone',
+  'dpo_name',
+  'dpo_email',
+  'operator_name',
+  'flow',
+  'geography',
+  'data_source',
+  'legal_basis',
+  'purpose',
+  'retention_period',
+  'data_subjects',
+  'security'
+]
+
+// Registros antigos podiam ter "Não se aplica" em campo obrigatório. Ao
+// editar, essas marcações saem e o campo volta a pedir resposta; na
+// visualização (Master) o que foi enviado é mostrado como está.
+function withoutRequiredNA(inventory: Inventory): Inventory {
+  const na = getNotApplicable(inventory.form_data)
+  if (!na.some(k => REQUIRED_FIELDS.includes(k))) return inventory
+  return {
+    ...inventory,
+    form_data: { ...inventory.form_data, not_applicable: na.filter(k => !REQUIRED_FIELDS.includes(k)) }
+  }
+}
+
 const TABS = [
   { id: 'identificacao', step: '1', title: '1–2 Identificação e Agentes', icon: <Building size={16} />, desc: 'Dados do processo, unidade e responsáveis' },
   { id: 'dados', step: '2', title: '3–9 Ciclo de Vida, Dados e Finalidade', icon: <Database size={16} />, desc: 'Base legal, categorias e retenção' },
@@ -66,7 +99,7 @@ export const InventoryFormView: React.FC<InventoryFormViewProps> = ({
   onDelete,
   readOnly = false
 }) => {
-  const [item, setItem] = useState<Inventory>(inventory)
+  const [item, setItem] = useState<Inventory>(() => (readOnly ? inventory : withoutRequiredNA(inventory)))
   const [activeTab, setActiveTab] = useState('identificacao')
   const [saving, setSaving] = useState(false)
   const [deleting, setDeleting] = useState(false)
@@ -144,9 +177,8 @@ export const InventoryFormView: React.FC<InventoryFormViewProps> = ({
   const validationErrors = useMemo(() => {
     const d = item.form_data
     const errors: { tab: string; field: string; message: string }[] = []
-    const na = getNotApplicable(d)
-    // Obrigatório = sem valor E sem "Não se aplica" (mesma regra do banco).
-    const missing = (key: string) => !na.includes(key) && !getInputValue(d, key).trim()
+    // Obrigatório = precisa de valor ("Não se aplica" não vale; mesma regra do banco).
+    const missing = (key: string) => !getInputValue(d, key).trim()
 
     // Tab 1 (All fields mandatory)
     if (missing('system_name')) {
@@ -155,7 +187,7 @@ export const InventoryFormView: React.FC<InventoryFormViewProps> = ({
     if (!item.title.trim()) {
       errors.push({ tab: 'identificacao', field: 'title', message: '1.2 Nome do Serviço / Processo é obrigatório' })
     }
-    if (!na.includes('reference_id') && !item.reference_id.trim()) {
+    if (!item.reference_id.trim()) {
       errors.push({ tab: 'identificacao', field: 'reference_id', message: '1.3 Nº de Referência / ID é obrigatório' })
     }
     if (missing('created_at')) {
@@ -217,7 +249,7 @@ export const InventoryFormView: React.FC<InventoryFormViewProps> = ({
     }
 
     // Tab 4
-    if (!na.includes('security') && getInputValue(d, 'security').trim().length < 15) {
+    if (getInputValue(d, 'security').trim().length < 15) {
       errors.push({ tab: 'seguranca', field: 'security', message: '12.1 Medidas de segurança devem ser detalhadas (mín. 15 caracteres)' })
     }
 
@@ -334,7 +366,7 @@ export const InventoryFormView: React.FC<InventoryFormViewProps> = ({
             <p className="form-page-subtitle">
               {readOnly
                 ? 'Visualização somente leitura. Para corrigir algo, devolva o inventário ao Ponto Focal com uma mensagem.'
-                : 'Preencha os campos obrigatórios (*) ou marque "Não se aplica" quando o campo não fizer sentido para este processo.'}
+                : 'Preencha todos os campos obrigatórios (*). Nas perguntas opcionais, marque "Não se aplica" quando não fizer sentido para este processo.'}
             </p>
           </div>
           <div className="flex-center-gap">
@@ -352,7 +384,7 @@ export const InventoryFormView: React.FC<InventoryFormViewProps> = ({
               <strong>Não é possível enviar: Existem {validationErrors.length} campos obrigatórios pendentes</strong>
             </div>
             <p className="alert-desc">
-              Cada campo obrigatório (*) precisa ser preenchido ou marcado como "Não se aplica" para enviar o relatório.
+              Todos os campos obrigatórios (*) precisam ser preenchidos para enviar o relatório.
             </p>
             <ul className="validation-error-list">
               {validationErrors.slice(0, 5).map((err, idx) => (
@@ -447,7 +479,7 @@ export const InventoryFormView: React.FC<InventoryFormViewProps> = ({
                     <div className="title-icon-badge"><Building size={18} /></div>
                     <div>
                       <h2>1 — Identificação do Serviço ou Processo de Negócio</h2>
-                      <span className="section-badge-required">Campos obrigatórios * — preencha ou marque "Não se aplica"</span>
+                      <span className="section-badge-required">Campos com * são obrigatórios</span>
                     </div>
                   </div>
 
@@ -458,7 +490,6 @@ export const InventoryFormView: React.FC<InventoryFormViewProps> = ({
                           1.1 — Nome do sistema / Plataforma *
                           <span title="Nome pelo qual o sistema é conhecido na unidade que o administra."><Info size={14} className="text-muted cursor-help" /></span>
                         </label>
-                        {naToggle('system_name')}
                       </div>
                       <input
                         id="system_name"
@@ -562,7 +593,6 @@ export const InventoryFormView: React.FC<InventoryFormViewProps> = ({
                     <div className={`form-field ${isFieldInvalid('reference_id') ? 'field-error' : ''}`}>
                       <div className="field-label-row">
                         <label htmlFor="reference_id">1.3 — Nº de Referência / Código ID *</label>
-                        {naToggle('reference_id')}
                       </div>
                       <input
                         id="reference_id"
@@ -614,7 +644,7 @@ export const InventoryFormView: React.FC<InventoryFormViewProps> = ({
                     <div className="title-icon-badge"><UserCheck size={18} /></div>
                     <div>
                       <h2>2 — Agentes de Tratamento e Encarregado (DPO)</h2>
-                      <span className="section-badge-required">Campos obrigatórios * — preencha ou marque "Não se aplica"</span>
+                      <span className="section-badge-required">Campos com * são obrigatórios</span>
                     </div>
                   </div>
 
@@ -622,7 +652,6 @@ export const InventoryFormView: React.FC<InventoryFormViewProps> = ({
                     <div className={`form-field ${isFieldInvalid('controller_name') ? 'field-error' : ''}`}>
                       <div className="field-label-row">
                         <label htmlFor="controller_name">2.1 — Controlador (Nome / Órgão) *</label>
-                        {naToggle('controller_name')}
                       </div>
                       <input
                         id="controller_name"
@@ -639,7 +668,6 @@ export const InventoryFormView: React.FC<InventoryFormViewProps> = ({
                     <div className={`form-field ${isFieldInvalid('controller_email') ? 'field-error' : ''}`}>
                       <div className="field-label-row">
                         <label htmlFor="controller_email">E-mail do Controlador *</label>
-                        {naToggle('controller_email')}
                       </div>
                       <input
                         id="controller_email"
@@ -656,7 +684,6 @@ export const InventoryFormView: React.FC<InventoryFormViewProps> = ({
                     <div className={`form-field ${isFieldInvalid('controller_phone') ? 'field-error' : ''}`}>
                       <div className="field-label-row">
                         <label htmlFor="controller_phone">Telefone do Controlador *</label>
-                        {naToggle('controller_phone')}
                       </div>
                       <input
                         id="controller_phone"
@@ -675,7 +702,6 @@ export const InventoryFormView: React.FC<InventoryFormViewProps> = ({
                     <div className={`form-field ${isFieldInvalid('dpo_name') ? 'field-error' : ''}`}>
                       <div className="field-label-row">
                         <label htmlFor="dpo_name">2.2 — Encarregado (DPO - Nome) *</label>
-                        {naToggle('dpo_name')}
                       </div>
                       <input
                         id="dpo_name"
@@ -692,7 +718,6 @@ export const InventoryFormView: React.FC<InventoryFormViewProps> = ({
                     <div className={`form-field ${isFieldInvalid('dpo_email') ? 'field-error' : ''}`}>
                       <div className="field-label-row">
                         <label htmlFor="dpo_email">E-mail do Encarregado *</label>
-                        {naToggle('dpo_email')}
                       </div>
                       <input
                         id="dpo_email"
@@ -709,7 +734,6 @@ export const InventoryFormView: React.FC<InventoryFormViewProps> = ({
                     <div className={`form-field ${isFieldInvalid('operator_name') ? 'field-error' : ''}`}>
                       <div className="field-label-row">
                         <label htmlFor="operator_name">2.3 — Operador (Razão Social / Nome) *</label>
-                        {naToggle('operator_name')}
                       </div>
                       <input
                         id="operator_name"
@@ -778,7 +802,6 @@ export const InventoryFormView: React.FC<InventoryFormViewProps> = ({
                   <div className={`form-field full-width ${isFieldInvalid('flow') ? 'field-error' : ''}`}>
                     <div className="field-label-row">
                       <label htmlFor="flow">4.1 — Descrição do fluxo de tratamento de dados pessoais *</label>
-                      {naToggle('flow')}
                     </div>
                     <textarea
                       id="flow"
@@ -802,7 +825,6 @@ export const InventoryFormView: React.FC<InventoryFormViewProps> = ({
                     <div className={`form-field ${isFieldInvalid('geography') ? 'field-error' : ''}`}>
                       <div className="field-label-row">
                         <label htmlFor="geography">5.1 — Abrangência geográfica do tratamento *</label>
-                        {naToggle('geography')}
                       </div>
                       <input
                         id="geography"
@@ -818,7 +840,6 @@ export const InventoryFormView: React.FC<InventoryFormViewProps> = ({
                     <div className={`form-field ${isFieldInvalid('data_source') ? 'field-error' : ''}`}>
                       <div className="field-label-row">
                         <label htmlFor="data_source">5.2 — Fonte de coleta dos dados *</label>
-                        {naToggle('data_source')}
                       </div>
                       <input
                         id="data_source"
@@ -843,7 +864,6 @@ export const InventoryFormView: React.FC<InventoryFormViewProps> = ({
                     <div className={`form-field full-width ${isFieldInvalid('legal_basis') ? 'field-error' : ''}`}>
                       <div className="field-label-row">
                         <label htmlFor="legal_basis">6.1 — Hipótese legal de tratamento (Base Legal) *</label>
-                        {naToggle('legal_basis')}
                       </div>
                       <input
                         id="legal_basis"
@@ -859,7 +879,6 @@ export const InventoryFormView: React.FC<InventoryFormViewProps> = ({
                     <div className={`form-field full-width ${isFieldInvalid('purpose') ? 'field-error' : ''}`}>
                       <div className="field-label-row">
                         <label htmlFor="purpose">6.2 — Finalidade específica do tratamento *</label>
-                        {naToggle('purpose')}
                       </div>
                       <textarea
                         id="purpose"
@@ -961,7 +980,6 @@ export const InventoryFormView: React.FC<InventoryFormViewProps> = ({
                     <div className={`form-field ${isFieldInvalid('retention_period') ? 'field-error' : ''}`}>
                       <div className="field-label-row">
                         <label htmlFor="retention_period">Tempo / Prazo de retenção dos dados *</label>
-                        {naToggle('retention_period')}
                       </div>
                       <input
                         id="retention_period"
@@ -1096,7 +1114,6 @@ export const InventoryFormView: React.FC<InventoryFormViewProps> = ({
                   <div className={`form-field full-width ${isFieldInvalid('data_subjects') ? 'field-error' : ''}`}>
                     <div className="field-label-row">
                       <label htmlFor="data_subjects">10.1 — Descrição dos grupos de titulares *</label>
-                      {naToggle('data_subjects')}
                     </div>
                     <textarea
                       id="data_subjects"
@@ -1174,7 +1191,6 @@ export const InventoryFormView: React.FC<InventoryFormViewProps> = ({
                   <div className={`form-field full-width margin-top-xs ${isFieldInvalid('security') ? 'field-error' : ''}`}>
                     <div className="field-label-row">
                       <label htmlFor="security">12.1 — Descrição do(s) controle(s) de segurança aplicado(s) *</label>
-                      {naToggle('security')}
                     </div>
                     <textarea
                       id="security"

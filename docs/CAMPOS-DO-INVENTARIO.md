@@ -75,13 +75,11 @@ O `validationErrors` em `InventoryFormView.tsx` é a lista oficial de campos obr
 
 ### "Não se aplica"
 
-Todo campo de texto (exceto 1.2 Nome do processo, 1.4 Data de criação, 1.5 Unidade, as seleções de tecnologia 1.1a–c e os campos de marcar opções) tem uma caixa "Não se aplica"; as tabelas das seções 11, 13 e 14 também, no título da seção. Marcar:
+A caixa "Não se aplica" existe **somente nas perguntas opcionais** (1.1d, 3.1, 6.3, 6.4, 6.5, descrição das categorias da seção 7, nome da base de dados, descrição dos dados sensíveis, 9.1, 9.2, tipo de medida de segurança, e as tabelas das seções 11, 13 e 14). Os campos obrigatórios (*) sempre exigem resposta — a lista `REQUIRED_FIELDS` em `InventoryFormView.tsx` e o trigger `validate_inventory_completion` ([`migration_07`](../supabase/migration_07_nao_se_aplica_opcionais.sql)) aplicam a mesma regra.
 
-- grava a chave do campo em `form_data.not_applicable` (ex.: `["dpo_email", "sharing"]`);
-- limpa o valor digitado e desabilita o campo, que passa a exibir "Não se aplica";
-- faz o campo obrigatório contar como respondido.
+Marcar a caixa grava a chave do campo em `form_data.not_applicable`, limpa o valor, desabilita o campo (que passa a exibir "Não se aplica") e o CSV/PDF mostram "Não se aplica" escrito.
 
-Regra única (front e banco): **obrigatório sem valor e sem "Não se aplica" = erro**. Na exportação CSV o texto "Não se aplica" aparece na célula. Registros antigos, sem `not_applicable`, continuam válidos (a lista ausente é tratada como vazia) e processos já concluídos antes da mudança não são revalidados.
+Registros antigos com "Não se aplica" em campo obrigatório não foram alterados no banco: o Master os vê como foram enviados; quando o Ponto Focal abre o inventário para editar, essas marcações saem e o campo volta a pedir resposta.
 
 ## Exportação CSV: as 28 colunas do relatório
 

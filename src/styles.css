@@ -2929,11 +2929,6 @@ button, input, textarea, select {
   letter-spacing: 0.3px;
 }
 
-.user-role-badge.role-gestor {
-  background: #eff6ff;
-  color: #2563eb;
-}
-
 .user-role-badge.role-master {
   background: #fdf4ff;
   color: #a21caf;
@@ -3417,7 +3412,7 @@ button, input, textarea, select {
 }
 
 /* ==========================================================================
-   APROVAÇÕES (Gestor)
+   APROVAÇÕES (Master)
    ========================================================================== */
 .aprovacoes-panel {
   max-width: 1200px;
@@ -3699,7 +3694,7 @@ button, input, textarea, select {
 }
 
 /* ==========================================================================
-   RELATÓRIOS (dashboard de Gestor e Master)
+   RELATÓRIOS (dashboard do Master)
    Paleta dos gráficos validada para daltonismo (azul único + par ordinal
    claro/escuro); cores de risco sempre acompanhadas de ícone e rótulo.
    ========================================================================== */

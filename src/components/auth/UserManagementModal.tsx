@@ -238,7 +238,7 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
                   onChange={e => setRole(e.target.value as Role)}
                   className="custom-select-large select-compact"
                 >
-                  {(['ponto_focal', 'gestor', 'master'] as Role[]).map(r => (
+                  {(['ponto_focal', 'master'] as Role[]).map(r => (
                     <option key={r} value={r}>
                       {ROLE_LABELS[r]} — {ROLE_DESCRIPTIONS[r]}
                     </option>
@@ -276,7 +276,7 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
               <span>
                 {role === 'ponto_focal'
                   ? '🔒 O Ponto Focal deverá criar uma senha pessoal no 1º acesso.'
-                  : '⚡ Gestor e Master entram direto, sem troca obrigatória de senha.'}
+                  : '⚡ O Master entra direto, sem troca obrigatória de senha.'}
               </span>
             </div>
 

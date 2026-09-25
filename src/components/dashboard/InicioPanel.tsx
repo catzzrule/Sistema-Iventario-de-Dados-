@@ -73,7 +73,7 @@ export const InicioPanel: React.FC<InicioPanelProps> = ({
             <li className="inicio-step">
               <span className="inicio-step-number">2</span>
               <div>
-                <strong>Seu gestor aprova</strong>
+                <strong>O Master aprova</strong>
                 <span className="inicio-step-desc">Ele recebe um aviso assim que você enviar.</span>
               </div>
             </li>
@@ -97,7 +97,7 @@ export const InicioPanel: React.FC<InicioPanelProps> = ({
                 <Undo2 size={18} />
               </div>
               <div className="inicio-followup-body">
-                <strong>O gestor pediu um ajuste</strong>
+                <strong>O Master pediu um ajuste</strong>
                 <p>{n.inventory_title ? <>Em <strong>{n.inventory_title}</strong>: </> : null}{n.message}</p>
               </div>
               <button type="button" className="btn-secondary btn-sm" onClick={() => onOpenNotification(n)}>

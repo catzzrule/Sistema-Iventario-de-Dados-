@@ -1,4 +1,4 @@
-export type Role = 'ponto_focal' | 'gestor' | 'master'
+export type Role = 'ponto_focal' | 'master'
 
 export type ItemStatus = 'mantido' | 'alterado' | 'encerrado' | 'novo'
 

@@ -62,7 +62,7 @@ export const AprovacoesPanel: React.FC<AprovacoesPanelProps> = ({
   const [selectedId, setSelectedId] = useState<string | null>(null)
 
   // O banco (RLS) já limita o que cada perfil enxerga; aqui só reforçamos o
-  // recorte: Gestor com unidade vê apenas a própria, Master vê todas.
+  // recorte: só o Master aprova e vê todas as unidades.
   const scopedDeclarations = useMemo(
     () =>
       unitDeclarations.filter(

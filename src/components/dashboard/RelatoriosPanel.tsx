@@ -400,8 +400,7 @@ export const RelatoriosPanel: React.FC<RelatoriosPanelProps> = ({
   const [dateTo, setDateTo] = useState('')
   const [refreshing, setRefreshing] = useState(false)
 
-  // Áreas que este perfil pode ver: Master e Gestor sem unidade veem todas;
-  // Gestor com unidade vê só a própria.
+  // Áreas visíveis: o Master vê todas (o painel é exclusivo dele).
   const scopedUnits = useMemo(
     () => (isMaster || !user.unit_id ? units : units.filter(u => u.id === user.unit_id)),
     [isMaster, units, user.unit_id]

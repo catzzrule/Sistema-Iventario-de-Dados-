@@ -29,7 +29,7 @@ import './styles.css'
 function demoRoleForEmail(email: string): Role {
   const clean = (email || '').toLowerCase()
   if (clean.includes('master')) return 'master'
-  if (clean.includes('gestor') || clean.includes('admin')) return 'gestor'
+  if (clean.includes('gestor') || clean.includes('admin')) return 'master'
   return 'ponto_focal'
 }
 
@@ -126,7 +126,7 @@ function App() {
       }
     }
 
-    // Gestor e Master nunca têm troca de senha forçada
+    // O Master nunca tem troca de senha forçada
     if (isManagerRole(role)) {
       mustChangePassword = false
     }
@@ -358,13 +358,13 @@ function App() {
       : await supabase.from('unit_declarations').insert(payload).select().single()
     if (error) throw error
 
-    await logAudit('submitted', 'unit_declaration', (data as UnitDeclaration).id, 'Declaração enviada para aprovação do gestor.', user.unit_id)
+    await logAudit('submitted', 'unit_declaration', (data as UnitDeclaration).id, 'Declaração enviada para aprovação do Master.', user.unit_id)
     await loadUnitDeclarations()
   }
 
   async function handleApproveDeclaration(declaration: UnitDeclaration) {
     if (!supabase || !user) return
-    if (!isManagerProfile(user)) throw new Error('Somente o Gestor ou o Master podem aprovar a declaração.')
+    if (!isManagerProfile(user)) throw new Error('Somente o Master pode aprovar a declaração.')
     const { error } = await supabase
       .from('unit_declarations')
       .update({ status: 'em_homologacao', approved_at: new Date().toISOString(), approved_by: user.id })
@@ -378,21 +378,21 @@ function App() {
           recipient_id: declaration.submitted_by,
           recipient_scope: 'user',
           type: 'approved',
-          message: 'Sua declaração foi aprovada pelo Gestor.'
+          message: 'Sua declaração foi aprovada pelo Master.'
         })
       } catch (err) {
         console.warn('Notice creating approval notification:', err)
       }
     }
 
-    await logAudit('approved', 'unit_declaration', declaration.id, 'Declaração aprovada pelo Gestor.', declaration.unit_id)
+    await logAudit('approved', 'unit_declaration', declaration.id, 'Declaração aprovada pelo Master.', declaration.unit_id)
     await loadAuditLog()
     await loadUnitDeclarations()
   }
 
   async function handleReturnDeclaration(declaration: UnitDeclaration, observation: string) {
     if (!supabase || !user) return
-    if (!isManagerProfile(user)) throw new Error('Somente o Gestor ou o Master podem devolver a declaração.')
+    if (!isManagerProfile(user)) throw new Error('Somente o Master pode devolver a declaração.')
     const { error } = await supabase
       .from('unit_declarations')
       .update({ submitted_at: null, submitted_by: null })

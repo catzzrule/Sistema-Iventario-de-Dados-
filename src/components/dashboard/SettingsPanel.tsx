@@ -38,7 +38,7 @@ interface SettingsPanelProps {
   onDeleteUser?: (targetId: string, transferTo: string) => Promise<void>
 }
 
-const ROLE_OPTIONS: Role[] = ['ponto_focal', 'gestor', 'master']
+const ROLE_OPTIONS: Role[] = ['ponto_focal', 'master']
 
 export const SettingsPanel: React.FC<SettingsPanelProps> = ({
   user,
@@ -359,7 +359,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
           <div className="settings-card-header settings-users-header">
             <div>
               <h3>Usuários e permissões</h3>
-              <p>Pontos Focais, Gestores e Masters com acesso ao sistema.</p>
+              <p>Pontos Focais e Masters com acesso ao sistema.</p>
             </div>
             {onCreateUser && (
               <button
@@ -554,7 +554,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
                     className="custom-select-large"
                   />
                   <span className="settings-hint">
-                    O Gestor só enxerga os dados da própria unidade. Gestor sem unidade vê todas as áreas.
+                    O Ponto Focal só enxerga e preenche os dados da própria unidade.
                   </span>
                 </div>
                 {editError && <div className="alert-box alert-error margin-top-xs">{editError}</div>}

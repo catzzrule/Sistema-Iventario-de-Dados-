@@ -141,7 +141,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   const activeView: DashboardSection = canAccessView(requestedView) ? requestedView : defaultView
 
   // Declarações enviadas e ainda não aprovadas, de qualquer unidade visível
-  // (a RLS já limita às unidades do Gestor; o Master vê todas).
+  // (o Master vê todas as unidades).
   const pendingApprovalsCount = useMemo(
     () =>
       unitDeclarations.filter(
@@ -505,9 +505,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             <div>
               <strong>Perfil {roleLabel} ativo</strong>
               <p>
-                {isMaster
-                  ? 'Você tem acesso total: todas as áreas, relatórios, aprovações, cadastro e gestão de usuários e permissões.'
-                  : 'Você acompanha e aprova os dados enviados pelos Pontos Focais da sua área, acessa os relatórios, a matriz de risco e a extração de planilhas.'}
+                Você tem acesso total: todas as áreas, aprovações, relatórios, extração de planilhas, cadastro e gestão de usuários e permissões.
               </p>
             </div>
           </div>
@@ -578,7 +576,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           </div>
         )}
 
-        {/* Modal de Devolução de Processo (Gestor) */}
+        {/* Modal de Devolução de Processo (Master) */}
         {returnTarget && (
           <div className="modal-backdrop-overlay" onClick={() => (!returning ? setReturnTarget(null) : null)}>
             <div className="modal-card-custom glass-card" onClick={e => e.stopPropagation()}>
@@ -788,7 +786,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                           <div className="process-title-row">
                             <span className="process-title">{item.title || 'Inventário de Processo'}</span>
                             {isManager && hasVulnerableData && (
-                              <span className="badge-manager-tag" title="Atenção Gestor: Dados de titulares com salvaguardas especiais (Art. 14)">
+                              <span className="badge-manager-tag" title="Atenção: dados de titulares com salvaguardas especiais (Art. 14)">
                                 ⚠️ Titulares Art. 14
                               </span>
                             )}

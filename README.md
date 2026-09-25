@@ -1,6 +1,6 @@
 # Inventário LGPD
 
-Plataforma web de governança de dados: substitui as cópias manuais da aba `3.0 Templete` de planilha por formulários de inventário de tratamento de dados pessoais, com login, papéis de acesso, controle de risco e fluxo de aprovação entre operadores e gestores.
+Plataforma web de governança de dados: substitui as cópias manuais da aba `3.0 Templete` de planilha por formulários de inventário de tratamento de dados pessoais, com login, papéis de acesso, controle de risco e fluxo de aprovação entre Pontos Focais e o Master.
 
 ## Stack
 
@@ -42,14 +42,14 @@ src/
   utils/
     lgpdRisk.ts                 # Regras de classificação de risco (roda 100% no cliente, sem IA)
     exportCsv.ts                 # Geração do CSV consolidado (Guia 3 SGD/MGI)
-    roles.ts                     # Perfis (ponto_focal/gestor/master): rótulos e regras de acesso do front
+    roles.ts                     # Perfis (ponto_focal/master): rótulos e regras de acesso do front
   components/
-    auth/                      # Login, criação/troca de senha, cadastro de usuário (gestor)
+    auth/                      # Login, criação/troca de senha, cadastro de usuário (Master)
     dashboard/                 # Shell pós-login: Sidebar, header, notificações, configurações, listagem
       InicioPanel.tsx           # Tela "Início" do ponto focal (progresso do ciclo, avisos)
       DeclaracaoPanel.tsx       # "Minha Declaração": operações, fontes de dados, compartilhamentos
-      AprovacoesPanel.tsx       # Tela de aprovação (Gestor e Master)
-      RelatoriosPanel.tsx       # Dashboard "Relatórios" (Gestor e Master), só com dados reais do banco
+      AprovacoesPanel.tsx       # Tela de aprovação (Master)
+      RelatoriosPanel.tsx       # Dashboard "Relatórios" (Master), só com dados reais do banco
     inventory/                 # Formulário multi-etapas de um inventário de processo
       SharingTable.tsx / TransferTable.tsx / ContractsTable.tsx  # Tabelas repetíveis (seções 11/13/14)
     common/                    # Componentes pequenos reaproveitados (ex.: RiskBadge)
@@ -62,13 +62,12 @@ supabase/schema.sql            # Única fonte de verdade do banco: tabelas, RLS,
 
 ## Papéis de acesso
 
-Definidos em `profiles.role` (coluna `text` com `check`): `ponto_focal`, `gestor`, `master`. A migração [`supabase/migration_03_perfis_relatorios.sql`](supabase/migration_03_perfis_relatorios.sql) converteu os valores antigos sem apagar ninguém: `user` → `ponto_focal`, `admin` → `gestor`, `encarregado`/`master` → `master`. O front ainda aceita os nomes antigos (`normalizeRole()` em `utils/roles.ts`) para não quebrar se o banco estiver atrasado.
+Definidos em `profiles.role` (coluna `text` com `check`): **`ponto_focal`** e **`master`**. Histórico: a [`migration_03`](supabase/migration_03_perfis_relatorios.sql) converteu `user` → `ponto_focal`, `admin` → `gestor`, `encarregado`/`master` → `master`; depois, por decisão do stakeholder, a [`migration_05`](supabase/migration_05_remove_gestor.sql) unificou o Gestor ao Master (quem era gestor virou master, ninguém foi apagado). O front ainda aceita os nomes antigos (`normalizeRole()` em `utils/roles.ts`).
 
 | Perfil | O que faz | Onde é garantido |
 |---|---|---|
-| **Ponto Focal** (antigo Operador de Dados) | Cria/edita os próprios inventários, preenche e envia a declaração da própria unidade. Não vê Relatórios nem Aprovações. Não muda o próprio perfil nem a própria unidade. | RLS de `inventories`/`unit_declarations` + triggers `guard_profile_privileges` e `guard_unit_declaration` |
-| **Gestor** (antigo Admin) | Vê os dados dos Pontos Focais da sua unidade (Gestor sem unidade vê todas), aprova/devolve declarações, devolve inventários, acessa o Dashboard. | `is_unit_manager()` nas policies |
-| **Master** (antigo Gestor/Encarregado) | Tudo do Gestor em todas as unidades + cadastrar usuários, alterar nome/perfil/unidade, enviar link de redefinição de senha, exigir troca de senha. | `is_master()` nas policies e no trigger de perfis |
+| **Ponto Focal** | Cria/edita os próprios inventários, preenche e envia a declaração da própria unidade. Não vê Relatórios nem Aprovações. Não muda o próprio perfil nem a própria unidade. | RLS de `inventories`/`unit_declarations` + triggers `guard_profile_privileges` e `guard_unit_declaration` |
+| **Master** | Acesso total: todas as unidades, aprovar/devolver declarações e inventários, Dashboard de Relatórios, cadastrar/editar/excluir usuários, redefinição e troca de senha. | `is_master()` (e `is_admin()`/`is_unit_manager()`, que hoje equivalem a Master) nas policies |
 
 Não existem rotas por URL (o app é uma máquina de estados), então não há como "pular" para uma tela digitando o endereço; mesmo assim, cada tela restrita tem um guarda no `DashboardView` e **toda** leitura/escrita passa pela RLS do Supabase — chamar a API direto com o token de um Ponto Focal não devolve dados de outras unidades nem permite mudar o próprio perfil.
 
@@ -78,13 +77,13 @@ Não existem rotas por URL (o app é uma máquina de estados), então não há c
 
 **Inventário de processo (Operação de Tratamento)**: ponto focal clica em "Novo Inventário" → preenche o formulário multi-etapas (`InventoryFormView`) → salva como rascunho (`status: 'rascunho'`) quantas vezes quiser → ao clicar em concluir, o front valida os campos obrigatórios e grava `status: 'concluido'`. Também existem `data_sources` (fontes de dados) e `sharings` (compartilhamentos) como entidades próprias, cada uma com um `item_status` (`novo`/`alterado`/`encerrado`/`mantido`) pra rastrear mudanças ciclo a ciclo — hoje tudo nasce `novo` porque ainda não existe um ciclo anterior de verdade.
 
-**Minha Declaração → Aprovação → Homologação**: o ponto focal revisa os itens da unidade em "Minha Declaração" (`DeclaracaoPanel`) e clica em "Enviar para aprovação do gestor" (grava `submitted_at`/`submitted_by` em `unit_declarations`). O gestor vê isso na tela "Aprovações" (`AprovacoesPanel`) — quantidade de itens por status, o que mudou, diagnóstico de risco agregado (reaproveita `riskReport()`) — e pode **aprovar** (avança pra `em_homologacao`) ou **devolver** com uma observação obrigatória (limpa o `submitted_at`, manda notificação `type: 'returned'` pro ponto focal). Quando há várias unidades aguardando, o Gestor sem unidade e o Master escolhem a área num seletor no topo da tela. A homologação final ainda não tem tela própria.
+**Minha Declaração → Aprovação → Homologação**: o ponto focal revisa os itens da unidade em "Minha Declaração" (`DeclaracaoPanel`) e clica em "Enviar para aprovação do Master" (grava `submitted_at`/`submitted_by` em `unit_declarations`). O Master vê isso na tela "Aprovações" (`AprovacoesPanel`) — quantidade de itens por status, o que mudou, diagnóstico de risco agregado (reaproveita `riskReport()`) — e pode **aprovar** (avança pra `em_homologacao`) ou **devolver** com uma observação obrigatória (limpa o `submitted_at`, manda notificação `type: 'returned'` pro ponto focal). Quando há várias unidades aguardando, o Master escolhe a área num seletor no topo da tela. A homologação final ainda não tem tela própria.
 
-**Notificações (caixa de entrada)**: tabela `notifications` com três tipos — `submitted` (processo enviado, endereçado a todos os gestores), `returned` (devolvido, com mensagem obrigatória) e `approved` (declaração aprovada). Mostradas pelo sino no cabeçalho e nos cards de "Início". Protegidas por RLS (`schema.sql`), não por lógica de front-end.
+**Notificações (caixa de entrada)**: tabela `notifications` com três tipos — `submitted` (processo enviado, endereçado aos Masters), `returned` (devolvido, com mensagem obrigatória) e `approved` (declaração aprovada). Mostradas pelo sino no cabeçalho e nos cards de "Início". Protegidas por RLS (`schema.sql`), não por lógica de front-end.
 
 **Configurações**: aba "Meu Perfil" (nome e senha; a unidade só é editável pelo Master) e, só para o Master, "Usuários e permissões" (cadastrar, editar nome/perfil/unidade, enviar link de redefinição de senha por e-mail, exigir troca de senha no próximo acesso, excluir usuário). O Master não altera o próprio perfil nem exclui a si mesmo. A exclusão roda no banco (função `admin_delete_user`, [`supabase/migration_04_excluir_usuario.sql`](supabase/migration_04_excluir_usuario.sql)): os inventários do usuário são transferidos para quem o Master escolher (nunca apagados), as referências de "quem fez" ficam vazias e a exclusão entra na auditoria. A senha em si nunca é vista por ninguém — redefinir é sempre por link do Supabase Auth.
 
-**Relatórios (Dashboard)**: menu "Relatórios", visível só para Gestor e Master (`RelatoriosPanel`). Tudo vem das tabelas `inventories`, `unit_declarations`, `units`, `cycles`, `audit_log` e `profiles` — nada é fictício. Filtros: ciclo, área, periodicidade (campo 9.1 agrupado em faixas) e período (data de criação). Mostra % de áreas que concluíram, áreas pendentes, formulários concluídos/rascunhos, risco alto, situação de cada área, formulários por área, respostas por mês, periodicidade, nível de risco, tabela por área e histórico. Cada gráfico tem "Ver dados em tabela". O botão "Atualizar dados" recarrega do banco.
+**Relatórios (Dashboard)**: menu "Relatórios", visível só para o Master (`RelatoriosPanel`). Tudo vem das tabelas `inventories`, `unit_declarations`, `units`, `cycles`, `audit_log` e `profiles` — nada é fictício. Filtros: ciclo, área, periodicidade (campo 9.1 agrupado em faixas) e período (data de criação). Mostra % de áreas que concluíram, áreas pendentes, formulários concluídos/rascunhos, risco alto, situação de cada área, formulários por área, respostas por mês, periodicidade, nível de risco, tabela por área e histórico. Cada gráfico tem "Ver dados em tabela". O botão "Atualizar dados" recarrega do banco.
 
 **"Não se aplica"**: os campos de texto do formulário (e as tabelas das seções 11, 13 e 14) têm uma caixa "Não se aplica". Marcada, o campo é limpo, fica desabilitado exibindo "Não se aplica" e deixa de ser obrigatório. A marcação é salva em `inventories.form_data.not_applicable` (lista com as chaves dos campos). Assim dá para distinguir: preenchido (tem valor), não se aplica (chave na lista) e pendente (sem valor e fora da lista). O CSV e a listagem mostram "Não se aplica" escrito. A regra "obrigatório = preenchido ou marcado" existe no front (`validationErrors`) e no banco (trigger `validate_inventory_completion`, que recusa gravar `status = 'concluido'` com pendências).
 
@@ -120,11 +119,11 @@ As env vars do Supabase têm um fallback hardcoded em `src/supabase.ts` (projeto
 
 - Autenticação e RLS do Supabase fazem o isolamento de dados — a UI nunca é a única barreira.
 - O verificador de risco roda 100% no cliente; nenhuma resposta de formulário é enviada a uma IA.
-- Exportação de CSV aparece para Gestor e Master; gestão de usuários só para o Master (e o banco bloqueia mudança de perfil feita por qualquer outro usuário).
+- Exportação de CSV e gestão de usuários só aparecem para o Master (e o banco bloqueia mudança de perfil feita por qualquer outro usuário).
 
 ## Antes de ir pra produção de verdade
 
 - Exija MFA, configure domínio de redirecionamento de auth e revise as policies no painel do Supabase.
-- Restrinja quem tem papel `gestor`/`master` e mantenha auditoria de acesso.
+- Restrinja quem tem papel `master` e mantenha auditoria de acesso.
 - Faça uma avaliação formal com o encarregado/DPO — o verificador de risco é uma triagem automatizada, não um parecer jurídico.
 - Se for integrar IA no futuro, envie só metadados anonimizados, por um serviço de back-end — nunca com uma chave secreta exposta no navegador.

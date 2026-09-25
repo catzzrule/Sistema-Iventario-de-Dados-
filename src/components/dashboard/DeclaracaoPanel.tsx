@@ -348,11 +348,11 @@ export const DeclaracaoPanel: React.FC<DeclaracaoPanelProps> = ({
         ) : isSubmitted ? (
           <span className="declaracao-submit-status">
             <CheckCircle2 size={15} />
-            Enviada para aprovação do gestor{declaration?.submitted_at ? ` em ${new Date(declaration.submitted_at).toLocaleDateString('pt-BR')}` : ''}.
+            Enviada para aprovação do Master{declaration?.submitted_at ? ` em ${new Date(declaration.submitted_at).toLocaleDateString('pt-BR')}` : ''}.
           </span>
         ) : (
           <span className="declaracao-submit-status declaracao-submit-status-pending">
-            Quando terminar de revisar, envie a declaração para o seu gestor aprovar.
+            Quando terminar de revisar, envie a declaração para o Master aprovar.
           </span>
         )}
         <button
@@ -362,7 +362,7 @@ export const DeclaracaoPanel: React.FC<DeclaracaoPanelProps> = ({
           disabled={submitting || isSubmitted || isBeyondSubmission || !onSubmitDeclaration}
         >
           <Send size={16} />
-          <span>{submitting ? 'Enviando...' : 'Enviar para aprovação do gestor'}</span>
+          <span>{submitting ? 'Enviando...' : 'Enviar para aprovação do Master'}</span>
         </button>
       </div>
 

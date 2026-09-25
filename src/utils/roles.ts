@@ -1,25 +1,25 @@
 import { Role } from '../types/inventory'
 
+// Dois perfis: Ponto Focal (preenche) e Master (aprova, vê relatórios e
+// administra tudo). O antigo perfil Gestor foi unificado ao Master.
 export const ROLE_LABELS: Record<Role, string> = {
   ponto_focal: 'Ponto Focal',
-  gestor: 'Gestor',
   master: 'Master'
 }
 
 export const ROLE_DESCRIPTIONS: Record<Role, string> = {
   ponto_focal: 'Preenche e acompanha os inventários da própria área',
-  gestor: 'Acompanha e aprova os dados enviados pelos Pontos Focais e acessa os relatórios',
-  master: 'Acesso total: usuários, permissões, relatórios e todos os dados'
+  master: 'Acesso total: aprovações, relatórios, usuários, permissões e todos os dados'
 }
 
-// Aceita os nomes antigos gravados antes da migração da Fase 4, para o app
-// não quebrar caso o banco ainda não tenha sido migrado.
+// Aceita os nomes antigos gravados antes das migrações, para o app não
+// quebrar caso o banco ainda não tenha sido migrado.
 const LEGACY_ROLE_MAP: Record<string, Role> = {
   ponto_focal: 'ponto_focal',
-  gestor: 'gestor',
   master: 'master',
+  gestor: 'master',
   user: 'ponto_focal',
-  admin: 'gestor',
+  admin: 'master',
   encarregado: 'master'
 }
 
@@ -27,8 +27,9 @@ export function normalizeRole(raw: unknown): Role {
   return LEGACY_ROLE_MAP[String(raw ?? '').toLowerCase().trim()] ?? 'ponto_focal'
 }
 
-export const isManagerRole = (role?: Role | null) => role === 'gestor' || role === 'master'
 export const isMasterRole = (role?: Role | null) => role === 'master'
-export const canViewReports = isManagerRole
-export const canApprove = isManagerRole
+// Mantidos como nomes próprios para deixar claro o que cada tela exige.
+export const isManagerRole = isMasterRole
+export const canViewReports = isMasterRole
+export const canApprove = isMasterRole
 export const canManageUsers = isMasterRole

@@ -1074,7 +1074,7 @@ export const InventoryFormView: React.FC<InventoryFormViewProps> = ({
                         <div>
                           <strong>ALERTA EXCLUSIVO PARA O GESTOR / DPO (Art. 14 LGPD)</strong>
                           <p>
-                            Atenção Gestor: Foram inseridos dados de titulares / grupos especiais no campo 10.
+                            Atenção Master: foram inseridos dados de titulares / grupos especiais no campo 10.
                             Certifique-se de validar se há base legal com salvaguardas reforçadas, verificação de melhor interesse e realização de Relatório de Impacto à Proteção de Dados (RIPD/DPIA).
                           </p>
                         </div>
@@ -1222,7 +1222,7 @@ export const InventoryFormView: React.FC<InventoryFormViewProps> = ({
                   )}
                 </div>
 
-                {/* Direct Risk Report Inside Security Tab (Only for Gestores) */}
+                {/* Direct Risk Report Inside Security Tab (Only for Master) */}
                 {isManager && (
                   <div className="section-block risk-details-block">
                     <div className="section-title">
@@ -1243,7 +1243,7 @@ export const InventoryFormView: React.FC<InventoryFormViewProps> = ({
             )}
           </section>
 
-          {/* Side Drawer Component (Only for Gestores) */}
+          {/* Side Drawer Component (Only for Master) */}
           {isManager && (
             <RiskDrawer
               risks={risks}

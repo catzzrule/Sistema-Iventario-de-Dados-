@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
 import {
   AlertOctagon,
   AlertTriangle,
@@ -250,6 +250,101 @@ const ColumnChart: React.FC<{ rows: { key: string; label: string; value: number 
   )
 }
 
+
+/* Pizza: situação do preenchimento por área -------------------------------- */
+
+type PieSlice = { key: string; label: string; value: number; color: string; detail?: string }
+
+function arcPath(cx: number, cy: number, r: number, start: number, end: number) {
+  const point = (a: number) => [cx + r * Math.sin(a), cy - r * Math.cos(a)]
+  const [x1, y1] = point(start)
+  const [x2, y2] = point(end)
+  const large = end - start > Math.PI ? 1 : 0
+  return `M ${cx} ${cy} L ${x1} ${y1} A ${r} ${r} 0 ${large} 1 ${x2} ${y2} Z`
+}
+
+const PieChart: React.FC<{ slices: PieSlice[]; total: number; totalLabel: string }> = ({ slices, total, totalLabel }) => {
+  const [active, setActive] = useState<string | null>(null)
+  if (total === 0) return <p className="rel-empty">Nenhuma área cadastrada para os filtros escolhidos.</p>
+
+  const size = 200
+  const c = size / 2
+  const r = c - 4
+  let angle = 0
+  const drawn = slices
+    .filter(sl => sl.value > 0)
+    .map(sl => {
+      const start = angle
+      angle += (sl.value / total) * Math.PI * 2
+      return { ...sl, start, end: angle }
+    })
+  const current = drawn.find(d => d.key === active)
+
+  return (
+    <div className="rel-pie">
+      <div className="rel-pie-figure">
+        <svg viewBox={`0 0 ${size} ${size}`} role="img" aria-label={`Situação do preenchimento de ${total} áreas`}>
+          {drawn.map(d =>
+            drawn.length === 1 ? (
+              <circle
+                key={d.key}
+                cx={c}
+                cy={c}
+                r={r}
+                fill={d.color}
+                className="rel-pie-slice"
+                tabIndex={0}
+                aria-label={`${d.label}: ${d.value} de ${total} (100%)`}
+                onMouseEnter={() => setActive(d.key)}
+                onMouseLeave={() => setActive(null)}
+                onFocus={() => setActive(d.key)}
+                onBlur={() => setActive(null)}
+              />
+            ) : (
+              <path
+                key={d.key}
+                d={arcPath(c, c, r, d.start, d.end)}
+                fill={d.color}
+                className={`rel-pie-slice ${active && active !== d.key ? 'is-dimmed' : ''}`}
+                tabIndex={0}
+                aria-label={`${d.label}: ${d.value} de ${total} (${pct(d.value, total)}%)`}
+                onMouseEnter={() => setActive(d.key)}
+                onMouseLeave={() => setActive(null)}
+                onFocus={() => setActive(d.key)}
+                onBlur={() => setActive(null)}
+              />
+            )
+          )}
+        </svg>
+        {current && (
+          <span className="rel-pie-tip" role="presentation">
+            <strong>{current.label}</strong>
+            {current.value} de {total} áreas · {pct(current.value, total)}%
+          </span>
+        )}
+      </div>
+      <div className="rel-pie-side">
+        <ul className="rel-pie-legend">
+          {slices.map(sl => (
+            <li key={sl.key} className={active === sl.key ? 'is-active' : ''}>
+              <i className="rel-swatch" style={{ background: sl.color }} aria-hidden="true" />
+              <span className="rel-pie-legend-label">
+                {sl.label}
+                {sl.detail && <small>{sl.detail}</small>}
+              </span>
+              <strong>{sl.value}</strong>
+              <span className="rel-pie-legend-pct">{pct(sl.value, total)}%</span>
+            </li>
+          ))}
+        </ul>
+        <p className="rel-pie-total">
+          Total considerado: <strong>{total}</strong> {totalLabel}
+        </p>
+      </div>
+    </div>
+  )
+}
+
 const DataTable: React.FC<{ headers: string[]; rows: (string | number)[][] }> = ({ headers, rows }) => (
   <details className="rel-table-toggle">
     <summary>Ver dados em tabela</summary>
@@ -323,6 +418,22 @@ export const RelatoriosPanel: React.FC<RelatoriosPanelProps> = ({
     setDateTo('')
   }
 
+  // Atualiza sozinho ao voltar para a aba e a cada 2 minutos com a aba
+  // visível, para o painel acompanhar envios e aprovações feitos por outros.
+  const refreshRef = useRef(onRefresh)
+  refreshRef.current = onRefresh
+  useEffect(() => {
+    const run = () => {
+      if (document.visibilityState === 'visible') refreshRef.current?.().catch(() => {})
+    }
+    const timer = window.setInterval(run, 120000)
+    window.addEventListener('focus', run)
+    return () => {
+      window.clearInterval(timer)
+      window.removeEventListener('focus', run)
+    }
+  }, [])
+
   async function handleRefresh() {
     if (!onRefresh) return
     setRefreshing(true)
@@ -382,6 +493,15 @@ export const RelatoriosPanel: React.FC<RelatoriosPanelProps> = ({
       else if (invs.length > 0 || decl) status = 'em_preenchimento'
       else status = 'nao_iniciada'
 
+      // Prazo: o do ciclo da declaração da área; sem declaração, o do ciclo
+      // filtrado (ou do ciclo aberto quando "Todos os ciclos").
+      const deadlineCycle =
+        (decl && cycleOptions.find(c => c.id === decl.cycle_id)) ||
+        (cycleId === ALL ? currentCycle : cycleOptions.find(c => c.id === cycleId)) ||
+        null
+      const deadline = deadlineCycle?.deadline || null
+      const overdue = Boolean(deadline && new Date() > new Date(`${deadline}T23:59:59`))
+
       const done = invs.filter(i => i.status === 'concluido').length
       const lastUpdate = [
         ...invs.map(i => i.updated_at),
@@ -396,6 +516,8 @@ export const RelatoriosPanel: React.FC<RelatoriosPanelProps> = ({
       return {
         unit,
         status,
+        deadline,
+        overdue,
         submittedAt: decl?.submitted_at || null,
         total: invs.length,
         done,
@@ -404,7 +526,7 @@ export const RelatoriosPanel: React.FC<RelatoriosPanelProps> = ({
         lastUpdate: lastUpdate || null
       }
     })
-  }, [areaUnits, unitDeclarations, cycleId, filteredInventories, cycleOptions])
+  }, [areaUnits, unitDeclarations, cycleId, filteredInventories, cycleOptions, currentCycle])
 
   const totalAreas = areaRows.length
   const filledAreas = areaRows.filter(r => FILLED_STATUSES.includes(r.status)).length
@@ -422,6 +544,27 @@ export const RelatoriosPanel: React.FC<RelatoriosPanelProps> = ({
   ).length
 
   const unassignedForms = areaId === ALL ? filteredInventories.filter(i => !i.unit_id).length : 0
+
+  // Pizza: mesma situação por área usada no resto do painel (unit_declarations)
+  // + prazo do ciclo (cycles.deadline). Cada área entra em uma única fatia.
+  const pieFilled = areaRows.filter(r => FILLED_STATUSES.includes(r.status)).length
+  const pieInProgress = areaRows.filter(r => r.status === 'em_preenchimento' && !r.overdue).length
+  const pieLateInProgress = areaRows.filter(r => r.status === 'em_preenchimento' && r.overdue).length
+  const pieNotStarted = areaRows.filter(r => r.status === 'nao_iniciada').length
+  const pieLateNotStarted = areaRows.filter(r => r.status === 'nao_iniciada' && r.overdue).length
+  const pieLate = pieLateInProgress + pieLateNotStarted
+  const pieDeadlines = Array.from(new Set(areaRows.map(r => r.deadline).filter((d): d is string => Boolean(d))))
+  const pieSlices: PieSlice[] = [
+    { key: 'preenchido', label: 'Preenchido', value: pieFilled, color: '#0ca30c', detail: 'declaração enviada, aprovada ou homologada' },
+    { key: 'em_preenchimento', label: 'Em preenchimento', value: pieInProgress, color: '#fab219', detail: 'iniciado, ainda dentro do prazo' },
+    {
+      key: 'pendente',
+      label: 'Pendente / Atrasado',
+      value: pieNotStarted + pieLateInProgress,
+      color: '#d03b3b',
+      detail: `${pieNotStarted} não iniciada${pieNotStarted !== 1 ? 's' : ''} · ${pieLate} com prazo vencido`
+    }
+  ]
 
   const statusRows: BarRow[] = AREA_STATUS_ORDER.map(s => {
     const count = areaRows.filter(r => r.status === s).length
@@ -647,6 +790,25 @@ export const RelatoriosPanel: React.FC<RelatoriosPanelProps> = ({
       ) : (
         <>
           <div className="rel-grid">
+            <section className="table-card glass-card rel-card rel-card-wide">
+              <header className="rel-card-header">
+                <h2>Situação do preenchimento das áreas</h2>
+                <span>
+                  {selectedCycle ? `${selectedCycle.label} · ` : ''}
+                  {pieDeadlines.length === 1
+                    ? `prazo ${new Date(`${pieDeadlines[0]}T00:00:00`).toLocaleDateString('pt-BR')}`
+                    : pieDeadlines.length > 1
+                    ? 'prazo de cada ciclo'
+                    : 'ciclo sem prazo definido — nada é considerado atrasado'}
+                </span>
+              </header>
+              <PieChart slices={pieSlices} total={totalAreas} totalLabel={`área${totalAreas !== 1 ? 's' : ''}`} />
+              <DataTable
+                headers={['Situação', 'Áreas', '%']}
+                rows={pieSlices.map(sl => [sl.label, sl.value, `${pct(sl.value, totalAreas)}%`])}
+              />
+            </section>
+
             <section className="table-card glass-card rel-card">
               <header className="rel-card-header">
                 <h2>Situação das áreas</h2>

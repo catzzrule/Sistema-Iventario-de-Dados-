@@ -13,6 +13,8 @@ import {
 } from '../../types/inventory'
 import { riskReport } from '../../utils/lgpdRisk'
 import { isMasterRole } from '../../utils/roles'
+import { isAwaitingApproval } from '../../utils/inventoryStatus'
+import { InventoryApprovalQueue } from './InventoryApprovalQueue'
 
 interface AprovacoesPanelProps {
   user: UserProfile
@@ -26,6 +28,8 @@ interface AprovacoesPanelProps {
   onApprove: (declaration: UnitDeclaration) => Promise<void>
   onReturn: (declaration: UnitDeclaration, observation: string) => Promise<void>
   onOpenInventory: (inventory: Inventory) => void
+  onApproveInventory?: (inventory: Inventory) => Promise<void>
+  onReturnInventory?: (inventory: Inventory, message: string) => Promise<void>
 }
 
 type FeedKind = 'inventory' | 'data_source' | 'sharing'
@@ -54,7 +58,9 @@ export const AprovacoesPanel: React.FC<AprovacoesPanelProps> = ({
   units,
   onApprove,
   onReturn,
-  onOpenInventory
+  onOpenInventory,
+  onApproveInventory,
+  onReturnInventory
 }) => {
   const [observation, setObservation] = useState('')
   const [busy, setBusy] = useState<'approve' | 'return' | null>(null)
@@ -196,28 +202,36 @@ export const AprovacoesPanel: React.FC<AprovacoesPanelProps> = ({
     }
   }
 
+  // Fila por inventário: todo inventário enviado (status "concluido") aparece
+  // aqui, independente de a unidade ter enviado a declaração anual.
+  const inventoryQueue = (
+    <InventoryApprovalQueue
+      inventories={inventories.filter(i => isAwaitingApproval(i.status))}
+      units={units}
+      allUsers={allUsers}
+      onOpen={onOpenInventory}
+      onApprove={onApproveInventory}
+      onReturn={onReturnInventory}
+    />
+  )
+
   if (!isPending) {
     return (
       <div className="aprovacoes-panel">
-        <span className="declaracao-eyebrow">APROVAÇÃO {user.unit ? `· ${user.unit.toUpperCase()}` : ''}</span>
-        <h1 className="aprovacoes-title">Nenhuma declaração aguardando você</h1>
-        <div className="aprovacoes-empty-card">
-          <Inbox size={32} className="text-muted" />
-          <p>
-            {declaration?.status === 'em_homologacao'
-              ? 'A declaração já foi aprovada e aguarda homologação.'
-              : declaration?.status === 'homologada'
-              ? 'A declaração deste ciclo já foi homologada.'
-              : 'Assim que o ponto focal enviar a declaração da unidade, ela aparece aqui para sua análise.'}
-          </p>
-        </div>
+        <span className="declaracao-eyebrow">APROVAÇÕES</span>
+        <h1 className="aprovacoes-title">Sua fila de aprovação</h1>
+        {inventoryQueue}
       </div>
     )
   }
 
   return (
     <div className="aprovacoes-panel">
-      <span className="declaracao-eyebrow">APROVAÇÃO · {unitName(declaration?.unit_id).toUpperCase()}</span>
+      <span className="declaracao-eyebrow">APROVAÇÕES</span>
+      <h1 className="aprovacoes-title">Sua fila de aprovação</h1>
+      {inventoryQueue}
+
+      <span className="declaracao-eyebrow aprovacoes-section-eyebrow">DECLARAÇÃO DA UNIDADE · {unitName(declaration?.unit_id).toUpperCase()}</span>
       {pendingDeclarations.length > 1 && (
         <div className="aprovacoes-unit-picker">
           <label htmlFor="aprovacoes-unit">
@@ -241,9 +255,9 @@ export const AprovacoesPanel: React.FC<AprovacoesPanelProps> = ({
           </select>
         </div>
       )}
-      <h1 className="aprovacoes-title">
+      <h2 className="aprovacoes-title aprovacoes-title-sm">
         Declaração {cycle ? `do ${cycle.label}` : ''} aguardando você
-      </h1>
+      </h2>
       <p className="aprovacoes-subtitle">
         Enviada por <strong>{submitterName}</strong> (ponto focal){declaration?.submitted_at ? ` em ${new Date(declaration.submitted_at).toLocaleString('pt-BR')}` : ''}.
         Revise as mudanças e o diagnóstico antes de aprovar ou devolver.

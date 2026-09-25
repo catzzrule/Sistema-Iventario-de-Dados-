@@ -9,6 +9,8 @@ import {
   NOT_APPLICABLE_LABEL
 } from '../../utils/lgpdRisk'
 import { isManagerRole } from '../../utils/roles'
+import { inventoryStatusLabel } from '../../utils/inventoryStatus'
+import { exportInventoryExcel, exportInventoryPdf } from '../../utils/exportInventory'
 import { SharingTable } from './SharingTable'
 import { TransferTable } from './TransferTable'
 import { ContractsTable } from './ContractsTable'
@@ -34,7 +36,9 @@ import {
   Trash2,
   AlertTriangle,
   ShieldAlert,
-  Info
+  Info,
+  FileDown,
+  FileSpreadsheet
 } from 'lucide-react'
 
 interface InventoryFormViewProps {
@@ -43,6 +47,8 @@ interface InventoryFormViewProps {
   onBack: () => void
   onSave: (inventory: Inventory) => Promise<void>
   onDelete?: (id: string) => Promise<void>
+  /** Somente leitura (Master): sem salvar, apagar ou editar campos. */
+  readOnly?: boolean
 }
 
 const TABS = [
@@ -57,7 +63,8 @@ export const InventoryFormView: React.FC<InventoryFormViewProps> = ({
   inventory,
   onBack,
   onSave,
-  onDelete
+  onDelete,
+  readOnly = false
 }) => {
   const [item, setItem] = useState<Inventory>(inventory)
   const [activeTab, setActiveTab] = useState('identificacao')
@@ -292,7 +299,7 @@ export const InventoryFormView: React.FC<InventoryFormViewProps> = ({
         </div>
 
         <div className="header-actions">
-          {onDelete && !item.id.startsWith('draft-') && (
+          {!readOnly && onDelete && !item.id.startsWith('draft-') && (
             <button
               type="button"
               onClick={handleDelete}
@@ -325,12 +332,14 @@ export const InventoryFormView: React.FC<InventoryFormViewProps> = ({
               {item.title ? item.title : 'Novo Inventário de Processo'}
             </h1>
             <p className="form-page-subtitle">
-              Preencha os campos obrigatórios (*) ou marque "Não se aplica" quando o campo não fizer sentido para este processo.
+              {readOnly
+                ? 'Visualização somente leitura. Para corrigir algo, devolva o inventário ao Ponto Focal com uma mensagem.'
+                : 'Preencha os campos obrigatórios (*) ou marque "Não se aplica" quando o campo não fizer sentido para este processo.'}
             </p>
           </div>
           <div className="flex-center-gap">
             <span className={`status-pill status-${item.status} animated-pulse-pill`}>
-              {item.status === 'concluido' ? 'Concluído' : 'Rascunho'}
+              {inventoryStatusLabel(item.status)}
             </span>
           </div>
         </section>
@@ -427,6 +436,8 @@ export const InventoryFormView: React.FC<InventoryFormViewProps> = ({
               borderWidth={1.5}
               squircle={false}
             />
+            {/* fieldset desabilitado trava todos os campos e botões internos */}
+            <fieldset className="form-readonly-fieldset" disabled={readOnly}>
 
             {/* TAB 1: IDENTIFICAÇÃO E AGENTES (TODOS OBRIGATÓRIOS) */}
             {activeTab === 'identificacao' && (
@@ -1241,6 +1252,7 @@ export const InventoryFormView: React.FC<InventoryFormViewProps> = ({
                 )}
               </div>
             )}
+            </fieldset>
           </section>
 
           {/* Side Drawer Component (Only for Master) */}
@@ -1256,6 +1268,21 @@ export const InventoryFormView: React.FC<InventoryFormViewProps> = ({
 
         {/* Sticky Action Footer */}
         <footer className="form-sticky-actions">
+          {readOnly ? (
+          <div className="footer-content">
+            <span className="form-readonly-note">Somente leitura — o Master não edita inventários.</span>
+            <div className="footer-right-actions">
+              <button type="button" className="btn-secondary btn-hover-effect" onClick={() => exportInventoryExcel(item)}>
+                <FileSpreadsheet size={18} />
+                <span>Baixar Excel (.csv)</span>
+              </button>
+              <button type="button" className="btn-primary btn-hover-effect shadow-emerald" onClick={() => exportInventoryPdf(item)}>
+                <FileDown size={18} />
+                <span>Baixar PDF</span>
+              </button>
+            </div>
+          </div>
+          ) : (
           <div className="footer-content">
             {onDelete && !item.id.startsWith('draft-') && (
               <button
@@ -1291,6 +1318,7 @@ export const InventoryFormView: React.FC<InventoryFormViewProps> = ({
               </button>
             </div>
           </div>
+          )}
         </footer>
       </main>
     </div>

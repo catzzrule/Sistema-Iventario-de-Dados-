@@ -1,4 +1,5 @@
 import React from 'react'
+import { inventoryStatusLabel } from '../../utils/inventoryStatus'
 import { RiskItem } from '../../types/inventory'
 import { RiskBadge } from '../common/RiskBadge'
 import { AlertTriangle, ShieldCheck, Info } from 'lucide-react'
@@ -25,7 +26,7 @@ export const RiskDrawer: React.FC<RiskDrawerProps> = ({
       <div className="sidebar-card">
         <div className="sidebar-card-header">
           <span className="sidebar-label">STATUS DO INVENTÁRIO</span>
-          <span className={`status-pill status-${status}`}>{status}</span>
+          <span className={`status-pill status-${status}`}>{inventoryStatusLabel(status)}</span>
         </div>
         <div className="sidebar-info">
           <span className="info-label">Última atualização:</span>

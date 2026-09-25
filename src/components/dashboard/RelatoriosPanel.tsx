@@ -19,6 +19,7 @@ import {
 } from '../../types/inventory'
 import { getHighestRisk, getInputValue, isNotApplicable } from '../../utils/lgpdRisk'
 import { isMasterRole, ROLE_LABELS } from '../../utils/roles'
+import { DraftSummaryRow, inventoryCounts, isApproved, isDraftStatus, isSubmittedStatus } from '../../utils/inventoryStatus'
 
 // Tudo aqui é calculado a partir do que veio do Supabase (inventories,
 // unit_declarations, units, cycles, audit_log, profiles). A RLS do banco já
@@ -33,6 +34,8 @@ interface RelatoriosPanelProps {
   unitDeclarations: UnitDeclaration[]
   auditLog: AuditLogEntry[]
   allUsers: ManagedProfile[]
+  /** Rascunhos por unidade/ciclo (só números): o Master não vê o conteúdo. */
+  draftSummary?: DraftSummaryRow[] | null
   onRefresh?: () => Promise<void>
 }
 
@@ -188,7 +191,7 @@ const StackedBarChart: React.FC<{ rows: StackRow[]; emptyText: string }> = ({ ro
   return (
     <>
       <div className="rel-legend" aria-hidden="true">
-        <span><i className="rel-swatch rel-swatch-done" /> Concluídos</span>
+        <span><i className="rel-swatch rel-swatch-done" /> Enviados</span>
         <span><i className="rel-swatch rel-swatch-draft" /> Rascunhos</span>
       </div>
       <div className="rel-hbar-list">
@@ -199,7 +202,7 @@ const StackedBarChart: React.FC<{ rows: StackRow[]; emptyText: string }> = ({ ro
               key={r.key}
               className="rel-hbar-row"
               tabIndex={0}
-              aria-label={`${r.label}: ${total} formulários, ${r.done} concluídos e ${r.draft} rascunhos`}
+              aria-label={`${r.label}: ${total} formulários, ${r.done} enviados e ${r.draft} rascunhos`}
             >
               <span className="rel-hbar-label">{r.label}</span>
               <div className="rel-hbar-track">
@@ -211,7 +214,7 @@ const StackedBarChart: React.FC<{ rows: StackRow[]; emptyText: string }> = ({ ro
               </div>
               <span className="rel-tip" role="presentation">
                 <strong>{r.label}</strong>
-                {r.done} concluído{r.done !== 1 ? 's' : ''} · {r.draft} rascunho{r.draft !== 1 ? 's' : ''}
+                {r.done} enviado{r.done !== 1 ? 's' : ''} · {r.draft} rascunho{r.draft !== 1 ? 's' : ''}
               </span>
             </div>
           )
@@ -383,6 +386,7 @@ export const RelatoriosPanel: React.FC<RelatoriosPanelProps> = ({
   unitDeclarations,
   auditLog,
   allUsers,
+  draftSummary = null,
   onRefresh
 }) => {
   const isMaster = isMasterRole(user.role)
@@ -465,6 +469,8 @@ export const RelatoriosPanel: React.FC<RelatoriosPanelProps> = ({
   const filteredInventories = useMemo(
     () =>
       inventories.filter(inv => {
+        // Conteúdo só dos inventários enviados; rascunhos entram como contagem.
+        if (draftSummary && !isSubmittedStatus(inv.status)) return false
         if (!inCycle(inv)) return false
         if (areaId === NO_UNIT ? Boolean(inv.unit_id) : areaId !== ALL && inv.unit_id !== areaId) return false
         if (areaId === ALL && !isMaster && user.unit_id && inv.unit_id !== user.unit_id) return false
@@ -473,8 +479,25 @@ export const RelatoriosPanel: React.FC<RelatoriosPanelProps> = ({
         return true
       }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [inventories, cycleId, areaId, frequency, dateFrom, dateTo, isMaster, user.unit_id, currentCycle]
+    [inventories, cycleId, areaId, frequency, dateFrom, dateTo, isMaster, user.unit_id, currentCycle, draftSummary]
   )
+
+  // Rascunhos (ciclo e área filtrados). Sem resumo do banco, conta os
+  // rascunhos visíveis na lista.
+  const draftRows = useMemo<DraftSummaryRow[]>(() => {
+    const rows: DraftSummaryRow[] = draftSummary
+      ? draftSummary
+      : inventories
+          .filter(i => isDraftStatus(i.status))
+          .map(i => ({ unit_id: i.unit_id ?? null, cycle_id: i.cycle_id ?? null, drafts: 1, last_update: i.updated_at }))
+    return rows.filter(r => {
+      if (cycleId !== ALL && (r.cycle_id ? r.cycle_id !== cycleId : cycleId !== currentCycle?.id)) return false
+      if (areaId !== ALL && r.unit_id !== areaId) return false
+      return true
+    })
+  }, [draftSummary, inventories, cycleId, areaId, currentCycle])
+  const draftsFor = (unitId: string | null) =>
+    draftRows.filter(r => r.unit_id === unitId).reduce((sum, r) => sum + Number(r.drafts || 0), 0)
 
   // Situação de cada área no ciclo escolhido (ou na declaração mais recente,
   // quando "Todos os ciclos" está selecionado).
@@ -486,11 +509,16 @@ export const RelatoriosPanel: React.FC<RelatoriosPanelProps> = ({
         .sort((a, b) => cycleYear(b.cycle_id) - cycleYear(a.cycle_id))
       const decl = decls[0] || null
       const invs = filteredInventories.filter(i => i.unit_id === unit.id)
+      const drafts = draftsFor(unit.id)
+      const approvedInvs = invs.filter(i => isApproved(i.status)).length
+      // Declaração anual (quando existe) ou, sem ela, os inventários da área:
+      // tudo enviado e nada em rascunho = área preenchida.
       let status: AreaStatus
       if (decl?.status === 'homologada') status = 'homologada'
       else if (decl?.status === 'em_homologacao') status = 'aprovada'
       else if (decl?.status === 'em_preenchimento' && decl.submitted_at) status = 'enviada'
-      else if (invs.length > 0 || decl) status = 'em_preenchimento'
+      else if (invs.length > 0 && drafts === 0) status = approvedInvs === invs.length ? 'aprovada' : 'enviada'
+      else if (invs.length > 0 || drafts > 0 || decl) status = 'em_preenchimento'
       else status = 'nao_iniciada'
 
       // Prazo: o do ciclo da declaração da área; sem declaração, o do ciclo
@@ -502,9 +530,10 @@ export const RelatoriosPanel: React.FC<RelatoriosPanelProps> = ({
       const deadline = deadlineCycle?.deadline || null
       const overdue = Boolean(deadline && new Date() > new Date(`${deadline}T23:59:59`))
 
-      const done = invs.filter(i => i.status === 'concluido').length
+      const done = invs.length
       const lastUpdate = [
         ...invs.map(i => i.updated_at),
+        ...draftRows.filter(r => r.unit_id === unit.id).map(r => r.last_update),
         decl?.submitted_at,
         decl?.approved_at,
         decl?.homologated_at
@@ -519,14 +548,15 @@ export const RelatoriosPanel: React.FC<RelatoriosPanelProps> = ({
         deadline,
         overdue,
         submittedAt: decl?.submitted_at || null,
-        total: invs.length,
+        total: done + drafts,
         done,
-        draft: invs.length - done,
+        draft: drafts,
         highRisk: invs.filter(i => getHighestRisk(i.form_data) === 'alto').length,
         lastUpdate: lastUpdate || null
       }
     })
-  }, [areaUnits, unitDeclarations, cycleId, filteredInventories, cycleOptions, currentCycle])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [areaUnits, unitDeclarations, cycleId, filteredInventories, cycleOptions, currentCycle, draftRows])
 
   const totalAreas = areaRows.length
   const filledAreas = areaRows.filter(r => FILLED_STATUSES.includes(r.status)).length
@@ -534,8 +564,10 @@ export const RelatoriosPanel: React.FC<RelatoriosPanelProps> = ({
   const inProgressAreas = areaRows.filter(r => r.status === 'em_preenchimento').length
   const notStartedAreas = areaRows.filter(r => r.status === 'nao_iniciada').length
 
+  // Mesma contagem da Visão Geral (utils/inventoryStatus).
+  const formCounts = inventoryCounts(filteredInventories, draftRows)
   const totalForms = filteredInventories.length
-  const doneForms = filteredInventories.filter(i => i.status === 'concluido').length
+  const doneForms = formCounts.submitted
   const highRiskForms = filteredInventories.filter(i => getHighestRisk(i.form_data) === 'alto').length
   const naForms = filteredInventories.filter(i => (i.form_data.not_applicable || []).length > 0).length
 
@@ -543,7 +575,7 @@ export const RelatoriosPanel: React.FC<RelatoriosPanelProps> = ({
     u => u.role === 'ponto_focal' && (areaId === ALL ? isMaster || !user.unit_id || u.unit_id === user.unit_id : u.unit_id === areaId)
   ).length
 
-  const unassignedForms = areaId === ALL ? filteredInventories.filter(i => !i.unit_id).length : 0
+  const unassignedForms = areaId === ALL ? filteredInventories.filter(i => !i.unit_id).length + draftsFor(null) : 0
 
   // Pizza: mesma situação por área usada no resto do painel (unit_declarations)
   // + prazo do ciclo (cycles.deadline). Cada área entra em uma única fatia.
@@ -555,7 +587,7 @@ export const RelatoriosPanel: React.FC<RelatoriosPanelProps> = ({
   const pieLate = pieLateInProgress + pieLateNotStarted
   const pieDeadlines = Array.from(new Set(areaRows.map(r => r.deadline).filter((d): d is string => Boolean(d))))
   const pieSlices: PieSlice[] = [
-    { key: 'preenchido', label: 'Preenchido', value: pieFilled, color: '#0ca30c', detail: 'declaração enviada, aprovada ou homologada' },
+    { key: 'preenchido', label: 'Preenchido', value: pieFilled, color: '#0ca30c', detail: 'inventários enviados, sem rascunho pendente' },
     { key: 'em_preenchimento', label: 'Em preenchimento', value: pieInProgress, color: '#fab219', detail: 'iniciado, ainda dentro do prazo' },
     {
       key: 'pendente',
@@ -576,9 +608,8 @@ export const RelatoriosPanel: React.FC<RelatoriosPanelProps> = ({
     .sort((a, b) => b.total - a.total)
     .map(r => ({ key: r.unit.id, label: r.unit.name, done: r.done, draft: r.draft }))
   if (unassignedForms > 0) {
-    const noUnitInvs = filteredInventories.filter(i => !i.unit_id)
-    const done = noUnitInvs.filter(i => i.status === 'concluido').length
-    byAreaRows.push({ key: NO_UNIT, label: 'Sem unidade vinculada', done, draft: noUnitInvs.length - done })
+    const done = filteredInventories.filter(i => !i.unit_id).length
+    byAreaRows.push({ key: NO_UNIT, label: 'Sem unidade vinculada', done, draft: draftsFor(null) })
   }
 
   const monthRows = useMemo(() => {
@@ -733,6 +764,17 @@ export const RelatoriosPanel: React.FC<RelatoriosPanelProps> = ({
         )}
       </div>
 
+      {unassignedForms > 0 && (
+        <div className="alert-box rel-unassigned-alert" role="status">
+          <AlertTriangle size={16} aria-hidden="true" />
+          <span>
+            {unassignedForms} formulário{unassignedForms !== 1 ? 's' : ''} sem unidade vinculada: entra
+            {unassignedForms !== 1 ? 'm' : ''} nos totais, mas não na situação por área. Vincule os Pontos Focais a uma
+            unidade em Configurações → Usuários e permissões.
+          </span>
+        </div>
+      )}
+
       <div className="rel-tiles">
         <div className="rel-tile rel-tile-hero">
           <span className="rel-tile-label">Áreas que concluíram o preenchimento</span>
@@ -761,9 +803,10 @@ export const RelatoriosPanel: React.FC<RelatoriosPanelProps> = ({
         </div>
         <div className="rel-tile">
           <span className="rel-tile-label">Formulários registrados</span>
-          <strong className="rel-tile-value">{totalForms}</strong>
+          <strong className="rel-tile-value">{formCounts.total}</strong>
           <span className="rel-tile-detail">
-            {doneForms} concluído{doneForms !== 1 ? 's' : ''} · {totalForms - doneForms} rascunho{totalForms - doneForms !== 1 ? 's' : ''}
+            {formCounts.awaiting} aguardando aprovação · {formCounts.approved} aprovado{formCounts.approved !== 1 ? 's' : ''} ·{' '}
+            {formCounts.drafts} rascunho{formCounts.drafts !== 1 ? 's' : ''}
           </span>
         </div>
         <div className="rel-tile">
@@ -824,11 +867,11 @@ export const RelatoriosPanel: React.FC<RelatoriosPanelProps> = ({
             <section className="table-card glass-card rel-card">
               <header className="rel-card-header">
                 <h2>Formulários por área</h2>
-                <span>Concluídos e rascunhos em cada área</span>
+                <span>Enviados e rascunhos em cada área</span>
               </header>
               <StackedBarChart rows={byAreaRows} emptyText="Nenhum formulário registrado nos filtros escolhidos." />
               <DataTable
-                headers={['Área', 'Concluídos', 'Rascunhos', 'Total']}
+                headers={['Área', 'Enviados', 'Rascunhos', 'Total']}
                 rows={byAreaRows.map(r => [r.label, r.done, r.draft, r.done + r.draft])}
               />
             </section>
@@ -882,8 +925,8 @@ export const RelatoriosPanel: React.FC<RelatoriosPanelProps> = ({
                     <th>ÁREA</th>
                     <th>SITUAÇÃO</th>
                     <th className="text-right">FORMULÁRIOS</th>
-                    <th className="text-right">CONCLUÍDOS</th>
-                    <th className="text-right">% CONCLUÍDO</th>
+                    <th className="text-right">ENVIADOS</th>
+                    <th className="text-right">% ENVIADO</th>
                     <th className="text-right">RISCO ALTO</th>
                     <th>ÚLTIMA ATUALIZAÇÃO</th>
                   </tr>

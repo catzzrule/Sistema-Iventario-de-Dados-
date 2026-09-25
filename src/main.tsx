@@ -17,6 +17,7 @@ import {
 } from './types/inventory'
 import { initialForm } from './utils/lgpdRisk'
 import { exportInventoriesToCsv } from './utils/exportCsv'
+import { DraftSummaryRow } from './utils/inventoryStatus'
 import { isManagerRole, isMasterRole, normalizeRole, ROLE_LABELS } from './utils/roles'
 import { LoginView } from './components/auth/LoginView'
 import { ForcePasswordChangeView } from './components/auth/ForcePasswordChangeView'
@@ -43,6 +44,8 @@ function App() {
   const [units, setUnits] = useState<Unit[]>([])
   const [cycles, setCycles] = useState<Cycle[]>([])
   const [auditLog, setAuditLog] = useState<AuditLogEntry[]>([])
+  // Master: contagem de rascunhos por unidade (o conteúdo não é visível a ele)
+  const [draftSummary, setDraftSummary] = useState<DraftSummaryRow[] | null>(null)
   const [cycle, setCycle] = useState<Cycle | null>(null)
   const [dataSources, setDataSources] = useState<DataSource[]>([])
   const [sharings, setSharings] = useState<Sharing[]>([])
@@ -149,7 +152,7 @@ function App() {
     await loadUnitDeclarations()
     await loadUnits()
     if (isManagerProfile(profile)) {
-      await Promise.all([loadAllUsers(), loadCycles(), loadAuditLog()])
+      await Promise.all([loadAllUsers(), loadCycles(), loadAuditLog(), loadDraftSummary()])
     }
   }
 
@@ -187,8 +190,18 @@ function App() {
     setAuditLog((data || []) as AuditLogEntry[])
   }
 
+  async function loadDraftSummary() {
+    if (!supabase) return
+    const { data, error } = await supabase.rpc('inventory_draft_summary')
+    if (error) {
+      console.warn('Notice loading draft summary:', error)
+      return
+    }
+    setDraftSummary((data || []) as DraftSummaryRow[])
+  }
+
   async function refreshReportData() {
-    await Promise.all([loadInventories(), loadUnitDeclarations(), loadUnits(), loadCycles(), loadAuditLog()])
+    await Promise.all([loadInventories(), loadUnitDeclarations(), loadUnits(), loadCycles(), loadAuditLog(), loadDraftSummary()])
   }
 
   // Resolve o nome digitado para uma unidade existente (sem diferenciar
@@ -520,6 +533,7 @@ function App() {
   }
 
   async function saveInventory(next: Inventory) {
+    if (isMasterRole(user?.role)) throw new Error('O Master não edita inventários.')
     const payload = {
       title: next.title,
       reference_id: next.reference_id,
@@ -760,8 +774,35 @@ function App() {
       console.warn('Notice creating return notification:', err)
     }
 
-    await loadInventories()
-    await loadNotifications(user)
+    await Promise.all([loadInventories(), loadNotifications(user), loadAuditLog(), loadDraftSummary()])
+  }
+
+  async function handleApproveInventory(inventory: Inventory) {
+    if (!supabase || !user || !isMasterRole(user.role)) throw new Error('Somente o Master pode aprovar inventários.')
+    const { data: updated, error } = await supabase
+      .from('inventories')
+      .update({ status: 'aprovado' })
+      .eq('id', inventory.id)
+      .eq('status', 'concluido')
+      .select('id')
+    if (error) throw error
+    if (!updated?.length) throw new Error('Este inventário não está mais aguardando aprovação. Atualize a página.')
+    await logAudit('inventory_approved', 'inventory', inventory.id, `Inventário "${inventory.title || 'Sem título'}" aprovado.`, inventory.unit_id ?? null)
+
+    try {
+      await supabase.from('notifications').insert({
+        inventory_id: inventory.id,
+        sender_id: user.id,
+        recipient_id: inventory.owner_id,
+        recipient_scope: 'user',
+        type: 'approved',
+        message: 'Seu inventário foi aprovado pelo Master.'
+      })
+    } catch (err) {
+      console.warn('Notice creating approval notification:', err)
+    }
+
+    await Promise.all([loadInventories(), loadNotifications(user), loadAuditLog()])
   }
 
   async function handleMarkNotificationRead(id: string) {
@@ -832,7 +873,8 @@ function App() {
           void loadInventories()
         }}
         onSave={saveInventory}
-        onDelete={deleteInventory}
+        onDelete={isMasterRole(user.role) ? undefined : deleteInventory}
+        readOnly={isMasterRole(user.role)}
       />
     )
   }
@@ -857,6 +899,8 @@ function App() {
       onDeleteUser={handleDeleteUser}
       onMarkNotificationRead={handleMarkNotificationRead}
       onReturnInventory={handleReturnInventory}
+      onApproveInventory={handleApproveInventory}
+      draftSummary={draftSummary}
       onUpdateProfile={handleUpdateProfile}
       onUpdatePassword={handleUpdateOwnPassword}
       onCreateDataSource={handleCreateDataSource}
@@ -866,6 +910,7 @@ function App() {
       onApproveDeclaration={handleApproveDeclaration}
       onReturnDeclaration={handleReturnDeclaration}
       onNew={() =>
+        !isMasterRole(user.role) &&
         setEditing({
           id: 'draft-' + crypto.randomUUID(),
           title: '',
@@ -879,7 +924,7 @@ function App() {
         })
       }
       onEdit={setEditing}
-      onDelete={deleteInventory}
+      onDelete={isMasterRole(user.role) ? undefined : deleteInventory}
       onLogout={signOut}
       onExport={handleExport}
       onCreateUser={isMasterRole(user.role) ? handleCreateUser : undefined}

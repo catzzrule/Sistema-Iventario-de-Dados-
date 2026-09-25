@@ -17,6 +17,14 @@ import { displayValue, getInputValue, getHighestRisk } from '../../utils/lgpdRis
 import { canViewReports, isManagerRole, isMasterRole, ROLE_LABELS } from '../../utils/roles'
 import { RelatoriosPanel } from './RelatoriosPanel'
 import { StatCard } from './StatCard'
+import {
+  DraftSummaryRow,
+  inventoryCounts,
+  inventoryStatusLabel,
+  isAwaitingApproval,
+  isDraftStatus,
+  isSubmittedStatus
+} from '../../utils/inventoryStatus'
 import { Sidebar, DashboardSection } from './Sidebar'
 import { NotificationBell } from './NotificationBell'
 import { SettingsPanel } from './SettingsPanel'
@@ -66,6 +74,8 @@ interface DashboardViewProps {
   onSendPasswordReset?: (email: string) => Promise<void>
   onForcePasswordChange?: (targetId: string) => Promise<void>
   onDeleteUser?: (targetId: string, transferTo: string) => Promise<void>
+  onApproveInventory?: (inventory: Inventory) => Promise<void>
+  draftSummary?: DraftSummaryRow[] | null
   onMarkNotificationRead?: (id: string) => void
   onReturnInventory?: (inventory: Inventory, message: string) => Promise<void>
   onUpdateProfile?: (updates: { full_name: string; unit: string }) => Promise<void>
@@ -107,6 +117,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   onSendPasswordReset,
   onForcePasswordChange,
   onDeleteUser,
+  onApproveInventory,
+  draftSummary = null,
   onMarkNotificationRead,
   onReturnInventory,
   onUpdateProfile,
@@ -136,6 +148,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   const canAccessView = (view: DashboardSection) => {
     if (view === 'relatorios') return canViewReports(user.role)
     if (view === 'aprovacoes') return isManager
+    // Telas de preenchimento: só o Ponto Focal (o Master não cria inventários)
+    if (view === 'inicio' || view === 'declaracao') return !isMaster
     return true
   }
   const activeView: DashboardSection = canAccessView(requestedView) ? requestedView : defaultView
@@ -144,6 +158,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   // (o Master vê todas as unidades).
   const pendingApprovalsCount = useMemo(
     () =>
+      inventories.filter(i => isAwaitingApproval(i.status)).length +
       unitDeclarations.filter(
         d =>
           d.cycle_id === cycle?.id &&
@@ -151,7 +166,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           d.status === 'em_preenchimento' &&
           (isMaster || !user.unit_id || d.unit_id === user.unit_id)
       ).length,
-    [unitDeclarations, cycle, isMaster, user.unit_id]
+    [inventories, unitDeclarations, cycle, isMaster, user.unit_id]
   )
 
   const myUnitDeclaration = useMemo(
@@ -159,7 +174,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     [unitDeclarations, user.unit_id, cycle]
   )
   const [searchTerm, setSearchTerm] = useState('')
-  const [statusFilter, setStatusFilter] = useState<'todos' | 'concluido' | 'rascunho'>('todos')
+  const [statusFilter, setStatusFilter] = useState<'todos' | 'concluido' | 'aprovado' | 'rascunho'>('todos')
   const [riskFilter, setRiskFilter] = useState<'todos' | 'alto' | 'medio' | 'baixo'>('todos')
   const [unitFilter, setUnitFilter] = useState<string>('todas')
   const [exportModalOpen, setExportModalOpen] = useState(false)
@@ -185,14 +200,15 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     () => inventories.filter(i => getHighestRisk(i.form_data) === 'alto').length,
     [inventories]
   )
-  const completedCount = useMemo(
-    () => inventories.filter(i => i.status === 'concluido').length,
-    [inventories]
+  // Mesma contagem usada nos Relatórios (utils/inventoryStatus).
+  const counts = useMemo(
+    () => inventoryCounts(inventories, isMaster ? draftSummary : null),
+    [inventories, isMaster, draftSummary]
   )
-  const draftCount = useMemo(
-    () => inventories.filter(i => i.status !== 'concluido').length,
-    [inventories]
-  )
+  const completedCount = counts.submitted
+  const awaitingCount = counts.awaiting
+  const approvedCount = counts.approved
+  const draftCount = counts.drafts
 
   // Filtered list
   const filteredInventories = useMemo(() => {
@@ -214,9 +230,9 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       const matchesStatus =
         statusFilter === 'todos'
           ? true
-          : statusFilter === 'concluido'
-          ? item.status === 'concluido'
-          : item.status !== 'concluido'
+          : statusFilter === 'rascunho'
+          ? isDraftStatus(item.status)
+          : item.status === statusFilter
 
       const highestRisk = getHighestRisk(item.form_data)
       const matchesRisk = riskFilter === 'todos' ? true : highestRisk === riskFilter
@@ -399,6 +415,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             onApprove={onApproveDeclaration || (async () => {})}
             onReturn={onReturnDeclaration || (async () => {})}
             onOpenInventory={onEdit}
+            onApproveInventory={onApproveInventory}
+            onReturnInventory={onReturnInventory}
           />
         ) : activeView === 'relatorios' ? (
           <RelatoriosPanel
@@ -410,6 +428,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             unitDeclarations={unitDeclarations}
             auditLog={auditLog}
             allUsers={allUsers}
+            draftSummary={draftSummary}
             onRefresh={onRefreshReports}
           />
         ) : (
@@ -467,21 +486,23 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               <div className="quick-stat-divider" />
               <div className="quick-stat-item">
                 <span className="quick-stat-val val-success">{completedCount}</span>
-                <span className="quick-stat-lbl">Concluídos</span>
+                <span className="quick-stat-lbl">Enviados</span>
               </div>
             </div>
           </div>
 
           <div className="hero-banner-actions">
-            <button
-              type="button"
-              onClick={onNew}
-              className="btn-primary btn-hero-cta shadow-emerald"
-              id="btn-novo-inventario"
-            >
-              <Plus size={20} />
-              <span>Novo Inventário de Processo</span>
-            </button>
+            {!isMaster && (
+              <button
+                type="button"
+                onClick={onNew}
+                className="btn-primary btn-hero-cta shadow-emerald"
+                id="btn-novo-inventario"
+              >
+                <Plus size={20} />
+                <span>Novo Inventário de Processo</span>
+              </button>
+            )}
 
             {isManager && (
               <button
@@ -635,8 +656,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         <section className="stats-grid">
           <StatCard
             title="Total Registrado"
-            value={totalCount}
-            description="Processos mapeados"
+            value={counts.total}
+            description="Enviados + rascunhos"
             icon={<ClipboardList size={20} />}
             variant="primary"
           />
@@ -650,17 +671,24 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             />
           )}
           <StatCard
-            title="Concluídos"
-            value={completedCount}
-            description="Mapeamentos finalizados"
+            title="Aguardando aprovação"
+            value={awaitingCount}
+            description="Enviados pelos Pontos Focais"
+            icon={<FileClock size={20} />}
+            variant="warning"
+          />
+          <StatCard
+            title="Aprovados"
+            value={approvedCount}
+            description="Aprovados pelo Master"
             icon={<FileCheck2 size={20} />}
             variant="success"
           />
           <StatCard
             title="Em Rascunho"
             value={draftCount}
-            description="Preenchimento pendente"
-            icon={<FileClock size={20} />}
+            description={isMaster ? 'Com os Pontos Focais (visíveis após o envio)' : 'Preenchimento pendente'}
+            icon={<ClipboardList size={20} />}
             variant="info"
           />
         </section>
@@ -680,16 +708,25 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               className={`filter-tab ${statusFilter === 'concluido' ? 'active' : ''}`}
               onClick={() => { setStatusFilter('concluido'); setRiskFilter('todos') }}
             >
-              <FileCheck2 size={15} />
-              <span>Concluídos ({completedCount})</span>
+              <FileClock size={15} />
+              <span>Aguardando aprovação ({awaitingCount})</span>
             </button>
             <button
-              className={`filter-tab ${statusFilter === 'rascunho' ? 'active' : ''}`}
-              onClick={() => { setStatusFilter('rascunho'); setRiskFilter('todos') }}
+              className={`filter-tab ${statusFilter === 'aprovado' ? 'active' : ''}`}
+              onClick={() => { setStatusFilter('aprovado'); setRiskFilter('todos') }}
             >
-              <FileClock size={15} />
-              <span>Rascunhos ({draftCount})</span>
+              <FileCheck2 size={15} />
+              <span>Aprovados ({approvedCount})</span>
             </button>
+            {!isMaster && (
+              <button
+                className={`filter-tab ${statusFilter === 'rascunho' ? 'active' : ''}`}
+                onClick={() => { setStatusFilter('rascunho'); setRiskFilter('todos') }}
+              >
+                <ClipboardList size={15} />
+                <span>Rascunhos ({draftCount})</span>
+              </button>
+            )}
             {isManager && (
               <button
                 className={`filter-tab ${riskFilter === 'alto' ? 'active' : ''}`}
@@ -736,8 +773,9 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                   onChange={e => setStatusFilter(e.target.value as any)}
                 >
                   <option value="todos">Todos</option>
-                  <option value="concluido">Concluídos</option>
-                  <option value="rascunho">Rascunhos</option>
+                  <option value="concluido">Aguardando aprovação</option>
+                  <option value="aprovado">Aprovados</option>
+                  {!isMaster && <option value="rascunho">Rascunhos</option>}
                 </select>
               </div>
 
@@ -809,7 +847,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                         </td>
                         <td>
                           <span className={`status-pill status-${item.status}`}>
-                            {item.status === 'concluido' ? 'Concluído' : 'Rascunho'}
+                            {inventoryStatusLabel(item.status)}
                           </span>
                         </td>
                         {isManager && (
@@ -823,13 +861,13 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                               type="button"
                               onClick={() => onEdit(item)}
                               className="btn-action-open"
-                              title="Abrir e editar inventário"
+                              title={isMaster ? 'Visualizar inventário (somente leitura)' : 'Abrir e editar inventário'}
                             >
-                              <span>Abrir</span>
+                              <span>{isMaster ? 'Visualizar' : 'Abrir'}</span>
                               <ArrowUpRight size={15} />
                             </button>
 
-                            {isManager && onReturnInventory && item.status === 'concluido' && (
+                            {isManager && onReturnInventory && isSubmittedStatus(item.status) && (
                               <button
                                 type="button"
                                 onClick={() => setReturnTarget(item)}
@@ -862,15 +900,21 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                     <td colSpan={isManager ? 6 : 5} className="empty-state">
                       <Inbox size={46} className="empty-icon text-muted" />
                       <h3>Nenhum inventário encontrado</h3>
-                      <p>Nenhum registro corresponde aos filtros selecionados. Crie um novo inventário de processo para começar.</p>
-                      <button
-                        type="button"
-                        onClick={onNew}
-                        className="btn-primary btn-sm margin-top shadow-emerald"
-                      >
-                        <Plus size={16} />
-                        <span>Cadastrar Inventário de Processo</span>
-                      </button>
+                      <p>
+                        {isMaster
+                          ? 'Nenhum inventário enviado corresponde aos filtros. Rascunhos só aparecem depois que o Ponto Focal envia.'
+                          : 'Nenhum registro corresponde aos filtros selecionados. Crie um novo inventário de processo para começar.'}
+                      </p>
+                      {!isMaster && (
+                        <button
+                          type="button"
+                          onClick={onNew}
+                          className="btn-primary btn-sm margin-top shadow-emerald"
+                        >
+                          <Plus size={16} />
+                          <span>Cadastrar Inventário de Processo</span>
+                        </button>
+                      )}
                     </td>
                   </tr>
                 )}

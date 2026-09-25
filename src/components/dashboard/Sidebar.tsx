@@ -50,6 +50,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
             {activeView === 'aprovacoes' && <span className="sidebar-active-dot" aria-hidden="true" />}
           </button>
         )}
+        {/* Início e Minha declaração são telas de preenchimento (Ponto Focal) */}
+        {!isManager && (
+        <>
         <button
           type="button"
           className={`sidebar-nav-item ${activeView === 'inicio' ? 'active' : ''}`}
@@ -68,6 +71,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
           <span>Minha declaração</span>
           {activeView === 'declaracao' && <span className="sidebar-active-dot" aria-hidden="true" />}
         </button>
+        </>
+        )}
         <button
           type="button"
           className={`sidebar-nav-item ${activeView === 'overview' ? 'active' : ''}`}

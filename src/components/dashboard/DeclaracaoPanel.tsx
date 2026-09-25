@@ -11,6 +11,7 @@ import {
   CheckCircle2
 } from 'lucide-react'
 import { isMasterRole } from '../../utils/roles'
+import { inventoryStatusLabel, isSubmittedStatus } from '../../utils/inventoryStatus'
 import { Cycle, DataSource, Inventory, Sharing, UnitDeclaration, UserProfile } from '../../types/inventory'
 
 type CloseKind = 'inventory' | 'data_source' | 'sharing'
@@ -86,7 +87,7 @@ export const DeclaracaoPanel: React.FC<DeclaracaoPanelProps> = ({
 
   const totalItems = activeInventories.length + activeSources.length + activeSharings.length
   const resolvedItems =
-    activeInventories.filter(i => i.status === 'concluido').length + activeSources.length + activeSharings.length
+    activeInventories.filter(i => isSubmittedStatus(i.status)).length + activeSources.length + activeSharings.length
 
   const noUnit = !user.unit_id
   // O Master é o último nível: não há para quem enviar a declaração.
@@ -201,7 +202,7 @@ export const DeclaracaoPanel: React.FC<DeclaracaoPanelProps> = ({
                 <span className="declaracao-item-kind">Operação de Tratamento</span>
                 <strong>{inv.title || 'Sem título'}</strong>
                 <span className="declaracao-item-meta">
-                  <span className={`status-pill status-${inv.status}`}>{inv.status === 'concluido' ? 'Concluído' : 'Rascunho'}</span>
+                  <span className={`status-pill status-${inv.status}`}>{inventoryStatusLabel(inv.status)}</span>
                   {inv.reference_id && <span className="code-badge">{inv.reference_id}</span>}
                 </span>
               </div>
